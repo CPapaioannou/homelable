@@ -58,6 +58,13 @@ class Node(Base):
     # NULL only for canvas furniture and for a node with no inventory row yet;
     # `inventory_sync.link_facts` fills both lists as soon as there is one.
     display_view: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Which of the device's utilisation metrics this node draws — a list of the
+    # metric *keys* it shows (e.g. ["capacity", "cpu"]). The node only decides
+    # what to display; the values themselves are a device fact on the inventory
+    # row (`device_inventory.metrics`) that an agent owns, so this stays node
+    # presentation. NULL for canvas furniture, [] for a device node that shows
+    # nothing yet.
+    show_metrics: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     pos_x: Mapped[float] = mapped_column(Float, default=0)
     pos_y: Mapped[float] = mapped_column(Float, default=0)
     parent_id: Mapped[str | None] = mapped_column(String, ForeignKey("nodes.id", ondelete="CASCADE"))

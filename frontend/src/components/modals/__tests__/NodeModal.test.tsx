@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { NodeModal } from '../NodeModal'
-import type { NodeData } from '@/types'
+import type { NodeData, UtilizationMetric } from '@/types'
 
 // ── Mock Shadcn Select with native <select> for testability ───────────────
 
@@ -638,53 +638,54 @@ describe('NodeModal', () => {
   })
 })
 
-// ── Utilization gauge section ──────────────────────────────────────
+// ── Metrics picker (which of the device's metrics this node draws) ─────────
 
-describe('NodeModal — utilization gauge', () => {
+const CPU_METRIC: UtilizationMetric = { key: 'cpu', label: 'CPU', kind: 'range', used: 60, total: 100, unit: '%' }
+const RAM_METRIC: UtilizationMetric = { key: 'ram', label: 'RAM', kind: 'range', used: 8, total: 16, unit: 'GB' }
+
+describe('NodeModal — metrics picker', () => {
   it('shows the section for a device type', () => {
     renderModal({ initial: BASE })
-    expect(screen.getByText('Utilization')).toBeDefined()
+    expect(screen.getByText('Metrics to show')).toBeDefined()
   })
 
   it('hides the section for canvas furniture', () => {
     renderModal({ initial: { type: 'groupRect', label: 'Garage', services: [] } })
-    expect(screen.queryByText('Utilization')).toBeNull()
+    expect(screen.queryByText('Metrics to show')).toBeNull()
   })
 
-  it('submits a metric filled in through the section', () => {
-    const { onSubmit } = renderModal({ initial: BASE })
-    fireEvent.click(screen.getByRole('button', { name: '+ Add gauge' }))
-    fireEvent.change(screen.getByPlaceholderText('Storage / CPU / RAM'), { target: { value: 'Storage' } })
-    fireEvent.change(screen.getByPlaceholderText('GB / % / cores'), { target: { value: 'GB' } })
-    // The two numeric gauge fields, targeted by their placeholders.
-    fireEvent.change(screen.getByPlaceholderText('512'), { target: { value: '512' } })
-    fireEvent.change(screen.getByPlaceholderText('1000'), { target: { value: '1000' } })
+  it('shows a hint when the device has no metrics', () => {
+    renderModal({ initial: BASE })
+    expect(screen.getByText(/no metrics yet/)).toBeDefined()
+  })
+
+  it('shows a device metric by default (uncurated = show all) and can hide it', () => {
+    const { onSubmit } = renderModal({ initial: { ...BASE, metrics: [CPU_METRIC] } })
+    const box = screen.getByLabelText(/CPU/) as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box) // uncheck the only metric -> show none
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-
-    const data = onSubmit.mock.calls[0][0] as Partial<NodeData>
-    expect(data.metrics).toEqual([{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }])
+    expect((onSubmit.mock.calls[0][0] as Partial<NodeData>).show_metrics).toEqual([])
   })
 
-  it('pre-fills and round-trips an existing metric untouched', () => {
+  it('round-trips an explicit selection, checking only the chosen keys', () => {
     const { onSubmit } = renderModal({
-      initial: { ...BASE, metrics: [{ label: 'CPU', used: 60, total: 100, unit: '%' }] },
+      initial: { ...BASE, metrics: [CPU_METRIC, RAM_METRIC], show_metrics: ['cpu'] },
     })
-    expect(screen.getByDisplayValue('60')).toBeDefined()
-    expect(screen.getByDisplayValue('100')).toBeDefined()
+    expect((screen.getByLabelText(/CPU/) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText(/RAM/) as HTMLInputElement).checked).toBe(false)
+    // Re-check RAM -> both are shown.
+    fireEvent.click(screen.getByLabelText(/RAM/) as HTMLInputElement)
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-
-    const data = onSubmit.mock.calls[0][0] as Partial<NodeData>
-    expect(data.metrics).toEqual([{ label: 'CPU', used: 60, total: 100, unit: '%' }])
+    expect((onSubmit.mock.calls[0][0] as Partial<NodeData>).show_metrics).toEqual(['cpu', 'ram'])
   })
 
-  it('clears the metrics through the Clear all button', () => {
+  it('hides everything through the Show none button', () => {
     const { onSubmit } = renderModal({
-      initial: { ...BASE, metrics: [{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }] },
+      initial: { ...BASE, metrics: [CPU_METRIC, RAM_METRIC], show_metrics: ['cpu'] },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show none' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-
-    const data = onSubmit.mock.calls[0][0] as Partial<NodeData>
-    expect(data.metrics).toEqual([])
+    expect((onSubmit.mock.calls[0][0] as Partial<NodeData>).show_metrics).toEqual([])
   })
 })

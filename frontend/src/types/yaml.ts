@@ -37,13 +37,22 @@ export interface YamlNode {
   // Whether port-number labels are shown next to connection points. Only written
   // when enabled so the toggle round-trips through export/import (issue #272).
   showPortNumbers?: boolean
-  // Generic utilisation gauges (storage/CPU/RAM). Only written when present so a
-  // node without gauges round-trips unchanged.
+  // Generic utilisation metrics the linked device carries (device fact).
+  // Open shape: kind is a free string; range uses used/total, value a single
+  // figure, status a state. Only written when present so a node without
+  // metrics round-trips unchanged.
   metrics?: {
     key?: string
     label: string
-    used: number
-    total: number
-    unit: string
+    kind?: string
+    unit?: string
+    used?: number
+    total?: number
+    value?: number | string
+    warn_at?: number
+    crit_at?: number
+    updated_at?: string
   }[]
+  // Which of the device's metric keys this node draws (node presentation).
+  showMetrics?: string[]
 }

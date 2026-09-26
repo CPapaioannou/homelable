@@ -27,8 +27,12 @@ class NodeBase(BaseModel):
     container_mode: bool = False
     custom_colors: dict[str, Any] | None = None
     custom_icon: str | None = None
-    # Generic utilisation gauges drawn on the card: [{key, label, used, total, unit}].
+    # Utilisation metrics the device carries: [{key, label, kind, unit?, used?,
+    # total?, value?, warn_at?, crit_at?, updated_at?}]. A device fact — the row
+    # is the truth, an agent owns the values. The node only picks which to draw.
     metrics: list[Any] = []
+    # Which of those metric keys this node draws — node presentation only.
+    show_metrics: list[str] = []
     cpu_count: int | None = None
     cpu_model: str | None = None
     ram_gb: float | None = None
@@ -88,6 +92,7 @@ class NodeUpdate(BaseModel):
     custom_colors: dict[str, Any] | None = None
     custom_icon: str | None = None
     metrics: list[Any] | None = None
+    show_metrics: list[str] | None = None
     cpu_count: int | None = None
     cpu_model: str | None = None
     ram_gb: float | None = None

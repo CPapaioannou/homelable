@@ -148,24 +148,20 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
   const set = (key: keyof NodeData, value: unknown) =>
     setForm((f) => ({ ...f, [key]: value }))
 
-  // The optional utilisation gauges a node wears — a list, one entry per gauge
-  // (storage on a drive, CPU/RAM on a host). Edit a field of gauge `i`, add a
-  // new one, or remove one. Empty numeric fields read as 0 so a gauge degrades
-  // to an empty bar rather than NaN.
-  const updateMetric = (index: number, patch: Partial<NonNullable<NodeData['metrics']>[number]>) =>
+  // Which of the device's metrics this node draws. The node only *picks* — the
+  // values themselves live on the device (edited in the device modal). An unset
+  // selection shows everything the device has; an explicit list shows exactly
+  // those keys; an empty list shows nothing.
+  const deviceMetrics = form.metrics ?? []
+  const allMetricKeys = deviceMetrics.map((m) => m.key).filter((k): k is string => k != null)
+  const shownMetricKeys = form.show_metrics ?? allMetricKeys
+  const toggleShowMetric = (key: string) =>
     setForm((f) => {
-      const metrics = [...(f.metrics ?? [])]
-      metrics[index] = { ...metrics[index], ...patch }
-      return { ...f, metrics }
+      const eff = f.show_metrics ?? allMetricKeys
+      const next = eff.includes(key) ? eff.filter((k) => k !== key) : [...eff, key]
+      return { ...f, show_metrics: next }
     })
-  const addMetric = () =>
-    setForm((f) => ({
-      ...f,
-      metrics: [...(f.metrics ?? []), { label: '', used: 0, total: 0, unit: '' }],
-    }))
-  const removeMetric = (index: number) =>
-    setForm((f) => ({ ...f, metrics: (f.metrics ?? []).filter((_, i) => i !== index) }))
-  const clearMetrics = () => setForm((f) => ({ ...f, metrics: [] }))
+  const showNoMetrics = () => setForm((f) => ({ ...f, show_metrics: [] }))
 
   const customStyle = useThemeStore((s) => s.customStyle)
   // Effective default count for a side: the per-type style default if set,
@@ -614,96 +610,59 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
               </div>
             )}
 
-            {/* Utilisation gauges — any device type can wear several at once
-                (storage on a drive, CPU/RAM on a host). Furniture
-                (group/groupRect/text) is excluded: it draws no device, so there
-                is nothing to measure. */}
+            {/* Which of the device's metrics this node draws — the node only picks; the
+                values live on the device itself. Furniture (group/groupRect/
+                text) is excluded: it draws no device, so there is nothing to show. */}
             {!isFurniture && (
               <div className="flex flex-col gap-2.5 col-span-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs text-muted-foreground">Utilization</Label>
-                  {(form.metrics?.length ?? 0) > 0 && (
+                  <Label className="text-xs text-muted-foreground">Metrics to show</Label>
+                  {form.show_metrics && form.show_metrics.length > 0 && (
                     <button
                       type="button"
-                      onClick={clearMetrics}
+                      onClick={showNoMetrics}
                       className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
                     >
-                      Clear all
+                      Show none
                     </button>
                   )}
                 </div>
                 <span className="text-[10px] text-muted-foreground/60">
-                  Optional — a green/amber/red bar per gauge under the node header (red at ≥ 90 %).
+                  Pick which of this device's metrics to draw as a bar / figure / chip under the node header.
+                  Values are edited on the device, not here.
                 </span>
-                {(form.metrics ?? []).map((m, i) => (
-                  <div key={m.key || i} className="rounded-md border border-[#30363d] p-2.5">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-[10px] text-muted-foreground">Key</Label>
-                        <Input
-                          value={m.key ?? ''}
-                          onChange={(e) => updateMetric(i, { key: e.target.value })}
-                          placeholder="cpu / ram / disk"
-                          className={`bg-[#21262d] border-[#30363d] font-mono text-xs h-7 ${modalStyles['modal-radius']}`}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-[10px] text-muted-foreground">Label</Label>
-                        <Input
-                          value={m.label}
-                          onChange={(e) => updateMetric(i, { label: e.target.value })}
-                          placeholder="Storage / CPU / RAM"
-                          className={`bg-[#21262d] border-[#30363d] text-sm h-7 ${modalStyles['modal-radius']}`}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-[10px] text-muted-foreground">Unit</Label>
-                        <Input
-                          value={m.unit}
-                          onChange={(e) => updateMetric(i, { unit: e.target.value })}
-                          placeholder="GB / % / cores"
-                          className={`bg-[#21262d] border-[#30363d] text-sm h-7 ${modalStyles['modal-radius']}`}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-[10px] text-muted-foreground">Used</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={m.used}
-                          onChange={(e) => updateMetric(i, { used: Number(e.target.value) || 0 })}
-                          placeholder="512"
-                          className={`bg-[#21262d] border-[#30363d] font-mono text-sm h-7 ${modalStyles['modal-radius']}`}
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <Label className="text-[10px] text-muted-foreground">Total</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={m.total}
-                          onChange={(e) => updateMetric(i, { total: Number(e.target.value) || 0 })}
-                          placeholder="1000"
-                          className={`bg-[#21262d] border-[#30363d] font-mono text-sm h-7 ${modalStyles['modal-radius']}`}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeMetric(i)}
-                        className="self-end text-[10px] text-muted-foreground hover:text-foreground cursor-pointer h-7"
-                      >
-                        Remove
-                      </button>
-                    </div>
+                {deviceMetrics.length === 0 ? (
+                  <span className="text-[10px] text-muted-foreground/60">
+                    This device has no metrics yet — add them in the device editor.
+                  </span>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {deviceMetrics.map((m, i) => {
+                      const key = m.key
+                      const showable = key != null
+                      const checked = showable && shownMetricKeys.includes(key as string)
+                      return (
+                        <label
+                          key={key ?? i}
+                          className={`flex items-center gap-2 rounded-md border border-[#30363d] px-2 py-1.5 ${showable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={!showable}
+                            checked={checked}
+                            onChange={() => key != null && toggleShowMetric(key)}
+                            className="h-3.5 w-3.5 accent-[#00d4ff]"
+                          />
+                          <span className="text-xs">{m.label || '(unnamed)'}</span>
+                          <span className="ml-auto font-mono text-[9px] text-muted-foreground/60">
+                            {m.kind ?? 'range'}
+                            {m.unit ? ` · ${m.unit}` : ''}
+                          </span>
+                        </label>
+                      )
+                    })}
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addMetric}
-                  className="self-start text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  + Add gauge
-                </button>
+                )}
               </div>
             )}
 

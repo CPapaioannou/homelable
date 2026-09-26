@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import UtilizationBar from '../UtilizationBar'
-import { utilizationColor, metricPercent } from '@/utils/utilization'
+import { utilizationColor, metricPercent, metricShape, selectedMetrics, isMetricStale } from '@/utils/utilization'
 import type { UtilizationMetric } from '@/types'
 
 const metric = (used: number, total: number): UtilizationMetric => ({
@@ -87,5 +87,78 @@ describe('UtilizationBar', () => {
     const { container } = render(<UtilizationBar metrics={[metric(50, 0)]} subtextColor="#888" />)
     expect(barColor(container)).toBe(GREEN)
     expect((screen.getByRole('progressbar') as HTMLElement).getAttribute('aria-valuenow')).toBe('0')
+  })
+})
+
+describe('UtilizationBar (by kind)', () => {
+  it('draws a value metric as a coloured figure, not a bar', () => {
+    render(
+      <UtilizationBar metrics={[{ key: 'cpu', label: 'CPU', kind: 'value', value: 78, unit: '%' }]} subtextColor="#888" />,
+    )
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect((screen.getByText('78 %') as HTMLElement).style.color).toBe(AMBER)
+  })
+
+  it('draws a status metric as a coloured chip', () => {
+    render(<UtilizationBar metrics={[{ key: 'smart', label: 'SMART', kind: 'status', value: 'ok' }]} subtextColor="#888" />)
+    expect((screen.getByText('ok') as HTMLElement).style.background).toBe(GREEN)
+  })
+
+  it('falls back on the fields present for an unknown kind', () => {
+    expect(metricShape({ label: 'X', kind: 'flux', value: 'degraded' })).toBe('status')
+    expect(metricShape({ label: 'X', kind: 'flux', value: 42 })).toBe('value')
+    expect(metricShape({ label: 'X', kind: 'flux', used: 1, total: 2 })).toBe('range')
+    expect(metricShape({ label: 'X' })).toBe('none')
+  })
+
+  it('skips a metric with no measurable fields', () => {
+    const { container } = render(<UtilizationBar metrics={[{ label: 'X', kind: 'flux' }]} subtextColor="#888" />)
+    expect(container.textContent).toBe('')
+  })
+
+  it('colours a range against its own warn_at / crit_at', () => {
+    const { container } = render(<UtilizationBar metrics={[{ label: 'D', used: 80, total: 100, warn_at: 50, crit_at: 90 }]} />)
+    expect(barColor(container)).toBe(AMBER)
+    const { container: c2 } = render(<UtilizationBar metrics={[{ label: 'D', used: 95, total: 100, warn_at: 50, crit_at: 90 }]} />)
+    expect(barColor(c2)).toBe(RED)
+  })
+
+  it('dims and flags a stale metric', () => {
+    const stale = { key: 'd', label: 'D', used: 10, total: 100, updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() }
+    const { container } = render(<UtilizationBar metrics={[stale]} subtextColor="#888" />)
+    expect(container.textContent).toContain('stale')
+    expect(isMetricStale(stale)).toBe(true)
+  })
+
+  it('shows an "as of" stamp for a fresh metric', () => {
+    const fresh = { key: 'd', label: 'D', used: 10, total: 100, updated_at: new Date().toISOString() }
+    const { container } = render(<UtilizationBar metrics={[fresh]} subtextColor="#888" />)
+    expect(container.textContent).toContain('as of')
+    expect(isMetricStale(fresh)).toBe(false)
+  })
+})
+
+describe('selectedMetrics', () => {
+  const all: UtilizationMetric[] = [
+    { key: 'a', label: 'A', used: 1, total: 2 },
+    { key: 'b', label: 'B', used: 1, total: 2 },
+    { label: 'nokey', used: 1, total: 2 },
+  ]
+
+  it('shows everything when the node has not curated', () => {
+    expect(selectedMetrics(all, undefined)).toHaveLength(3)
+  })
+
+  it('shows nothing when the selection is an empty list', () => {
+    expect(selectedMetrics(all, [])).toHaveLength(0)
+  })
+
+  it('shows exactly the chosen keys (a keyless metric is excluded)', () => {
+    expect(selectedMetrics(all, ['b'])).toEqual([all[1]])
+  })
+
+  it('returns nothing when the device has no metrics', () => {
+    expect(selectedMetrics([], ['a'])).toHaveLength(0)
+    expect(selectedMetrics(undefined, undefined)).toHaveLength(0)
   })
 })

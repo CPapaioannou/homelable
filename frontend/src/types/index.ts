@@ -126,12 +126,28 @@ export interface NodeProperty {
  * canvases may carry two different gauges.
  */
 export interface UtilizationMetric {
-  /** Stable machine id the agent targets when it updates this gauge. */
+  /** Stable machine id the agent targets when it updates this metric. */
   key?: string
   label: string
-  used: number
-  total: number
-  unit: string
+  /**
+   * Open string, not a closed enum: "range" (used/total), "value" (a single
+   * figure), "status" (ok/warn/crit or text), or anything new. The renderer
+   * falls back on the fields present, so an unknown kind still draws.
+   */
+  kind?: string
+  unit?: string
+  /** kind "range": the used portion. */
+  used?: number
+  /** kind "range": the total. */
+  total?: number
+  /** kind "value": a single figure; kind "status": ok/warn/crit or text. */
+  value?: number | string
+  /** Amber threshold — a percentage for "range", an absolute value otherwise. Default 70. */
+  warn_at?: number
+  /** Red threshold — a percentage for "range", an absolute value otherwise. Default 90. */
+  crit_at?: number
+  /** When the value was last updated (agent staleness). */
+  updated_at?: string
 }
 
 /**
@@ -249,8 +265,18 @@ export interface NodeData extends Record<string, unknown> {
   properties?: NodeProperty[]
   parent_id?: string
   container_mode?: boolean
-  /** Generic utilisation gauges for the card header bar; empty/absent = no bars. */
+  /**
+   * The linked device's utilisation metrics (device fact, hydrated from the
+   * inventory row). This is the data the node looks up when drawing — the node
+   * never owns the values, an agent does.
+   */
   metrics?: UtilizationMetric[]
+  /**
+   * Which of the device's metric keys this node draws — node presentation only.
+   * The renderer looks each key up in `metrics` and draws it. Empty/absent =
+   * nothing shown.
+   */
+  show_metrics?: string[]
   custom_colors?: {
     border?: string
     background?: string

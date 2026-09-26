@@ -73,6 +73,27 @@ describe('exportCanvasToYaml', () => {
     expect(entry).not.toHaveProperty('metrics')
   })
 
+  it('serializes the node-local showMetrics selection when present', () => {
+    const nodes = [
+      makeNode({
+        label: 'SSD 1',
+        type: 'drive',
+        metrics: [{ key: 'capacity', label: 'Storage', used: 512, total: 1000, unit: 'GB' }],
+        show_metrics: ['capacity'],
+      }),
+    ]
+    const result = yaml.load(exportCanvasToYaml(nodes, [])) as object[]
+    const entry = result[0] as Record<string, unknown>
+    expect(entry.showMetrics).toEqual(['capacity'])
+  })
+
+  it('omits the showMetrics key when a node has not curated its metrics', () => {
+    const nodes = [makeNode({ label: 'Server', type: 'server' })]
+    const result = yaml.load(exportCanvasToYaml(nodes, [])) as object[]
+    const entry = result[0] as Record<string, unknown>
+    expect(entry).not.toHaveProperty('showMetrics')
+  })
+
   it('serializes parent relationship from parentId', () => {
     const parent = makeNode({ label: 'Proxmox1', type: 'proxmox' }, 'pve1')
     const child = makeNode({ label: 'VM1', type: 'vm' }, 'vm1', 'pve1')

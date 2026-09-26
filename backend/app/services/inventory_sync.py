@@ -972,6 +972,9 @@ def hydrated_node(node: Node, device: InventoryDevice | None) -> dict[str, Any]:
     # An implementation detail of the split, not part of the wire shape: the
     # view is reported *through* the services and properties it orders.
     view = payload.pop("display_view", None) or {}
+    # A list on the wire, never null: furniture and pre-migration rows store
+    # NULL, and the response schema will not accept it.
+    payload["show_metrics"] = list(payload.get("show_metrics") or [])
     if device is None:
         return payload
 

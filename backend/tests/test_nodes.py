@@ -221,6 +221,49 @@ async def test_update_node_without_metrics_does_not_wipe(client: AsyncClient, he
     assert res.json()["metrics"] == [METRIC]
 
 
+# The node only *picks* which of the device's metrics to draw — that choice is
+# node-local (`show_metrics`), distinct from the device's own `metrics` values.
+async def test_create_node_with_show_metrics(client: AsyncClient, headers: dict):
+    payload = {
+        "type": "drive",
+        "label": "SSD 1",
+        "status": "unknown",
+        "metrics": [METRIC],
+        "show_metrics": ["storage"],
+    }
+    res = await client.post("/api/v1/nodes", json=payload, headers=headers)
+    assert res.status_code == 201
+    assert res.json()["show_metrics"] == ["storage"]
+    # The device's values travel separately, untouched by the display choice.
+    assert res.json()["metrics"] == [METRIC]
+
+
+async def test_create_node_show_metrics_defaults_to_empty(client: AsyncClient, headers: dict):
+    res = await client.post("/api/v1/nodes", json={"type": "server", "label": "N", "status": "unknown"}, headers=headers)
+    assert res.status_code == 201
+    assert res.json()["show_metrics"] == []
+
+
+async def test_update_node_show_metrics(client: AsyncClient, headers: dict):
+    create = await client.post("/api/v1/nodes", json={"type": "drive", "label": "N", "status": "unknown"}, headers=headers)
+    node_id = create.json()["id"]
+    res = await client.patch(f"/api/v1/nodes/{node_id}", json={"show_metrics": ["cpu", "ram"]}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["show_metrics"] == ["cpu", "ram"]
+
+
+async def test_update_node_without_show_metrics_does_not_wipe(client: AsyncClient, headers: dict):
+    create = await client.post(
+        "/api/v1/nodes",
+        json={"type": "drive", "label": "N", "status": "unknown", "show_metrics": ["storage"]},
+        headers=headers,
+    )
+    node_id = create.json()["id"]
+    res = await client.patch(f"/api/v1/nodes/{node_id}", json={"label": "Renamed"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["show_metrics"] == ["storage"]
+
+
 async def test_update_node_parent_id(client: AsyncClient, headers: dict):
     parent = await client.post("/api/v1/nodes", json={"type": "proxmox", "label": "PVE", "status": "unknown"}, headers=headers)
     parent_id = parent.json()["id"]

@@ -15,6 +15,7 @@ import { sideHandleCount } from '@/utils/handleUtils'
 import { SideHandles } from './SideHandles'
 import { getServiceUrl } from '@/utils/serviceUrl'
 import UtilizationBar from './UtilizationBar'
+import { selectedMetrics } from '@/utils/utilization'
 
 interface BaseNodeProps extends NodeProps<Node<NodeData>> {
   icon: LucideIcon
@@ -41,6 +42,9 @@ export function BaseNode({ id, data, selected, icon: typeIcon, width, height }: 
   const colors = resolveNodeColors(data, activeTheme)
   const statusColor = theme.colors.statusColors[data.status]
   const isOnline = data.status === 'online'
+  // Which of the device's utilisation metrics this node draws — the node only
+  // picks; the values are the device's. Absent selection shows everything.
+  const shownMetrics = selectedMetrics(data.metrics, data.show_metrics)
   // Hiding a service is a property of this node, not of the device: another
   // canvas drawing the same device answers for itself.
   const services = (data.services ?? []).filter((svc) => svc.visible !== false)
@@ -141,11 +145,11 @@ export function BaseNode({ id, data, selected, icon: typeIcon, width, height }: 
       </div>
 
       {/* Generic utilisation gauges (e.g. a drive's storage bars) — any node
-          type can wear them; driven purely by the optional `metrics` list. */}
-      {data.metrics && data.metrics.length > 0 && (
+          type can wear them; the node picks which of the device's metrics to draw. */}
+      {shownMetrics.length > 0 && (
         <>
           <div style={{ height: 1, background: `${colors.border}44`, margin: '0 8px' }} />
-          <UtilizationBar metrics={data.metrics} subtextColor={theme.colors.nodeSubtextColor} />
+          <UtilizationBar metrics={shownMetrics} subtextColor={theme.colors.nodeSubtextColor} />
         </>
       )}
 

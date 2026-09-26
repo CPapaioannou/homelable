@@ -58,7 +58,7 @@ import { DEVICE_TYPE_GROUPS } from '@/utils/nodeTypeGroups'
 import { formatRelative, formatTimestamp } from '@/utils/timeFormat'
 import { countPorts } from '@/utils/portSpec'
 import { serviceToForm, type ServiceFormData, type ServiceSubmitData } from '@/utils/serviceForm'
-import { NODE_TYPE_LABELS, type CheckMethod, type DeviceStatus, type InventoryEntry, type NodeProperty, type NodeType, type ServiceInfo } from '@/types'
+import { NODE_TYPE_LABELS, type CheckMethod, type DeviceStatus, type InventoryEntry, type NodeProperty, type NodeType, type ServiceInfo, type UtilizationMetric } from '@/types'
 import modalStyles from './modal-interactive.module.css'
 
 // Home is `@/types` now — re-exported because most call sites import it here.
@@ -292,6 +292,9 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
   const [form, setForm] = useState<EditForm>(() => (device ? toForm(device) : toForm({} as InventoryEntry)))
   const [properties, setProperties] = useState<NodeProperty[]>(device?.properties ?? [])
   const [services, setServices] = useState<ServiceInfo[]>(device?.services ?? [])
+  // The device's utilisation metrics — keyed gauges the agent or the user feeds;
+  // a canvas node only picks which of these to draw.
+  const [metrics, setMetrics] = useState<UtilizationMetric[]>(device?.metrics ?? [])
   // The device's front panel. Null for a device no rack has ever modelled —
   // there is then nothing to draw and nothing to save.
   const [rackModel, setRackModel] = useState<DeviceRackModel | null>(
@@ -331,6 +334,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
     setForm(toForm(d))
     setProperties(d.properties ?? [])
     setServices(d.services ?? [])
+    setMetrics(d.metrics ?? [])
     setRackModel(toRackModel(d))
     setEditing(false)
     setSvcModal(null)
@@ -413,6 +417,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
     setForm(toForm(device))
     setProperties(device.properties ?? [])
     setServices(device.services ?? [])
+    setMetrics(device.metrics ?? [])
     setRackModel(toRackModel(device))
   }
 
@@ -455,6 +460,13 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
     )
   }
 
+  // --- Utilisation metrics (keyed gauges owned by the device) ---------------
+  const addMetric = () =>
+    setMetrics((prev) => [...prev, { key: '', label: '', kind: 'range', unit: '' }])
+  const updateMetric = (i: number, patch: Partial<UtilizationMetric>) =>
+    setMetrics((prev) => prev.map((m, j) => (j === i ? { ...m, ...patch } : m)))
+  const removeMetric = (i: number) => setMetrics((prev) => prev.filter((_, j) => j !== i))
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -482,6 +494,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
         check_target: nullable(form.check_target),
         properties,
         services,
+        metrics,
         // Only for a device that has a front panel: sending these for one that
         // has none would model every device the user ever edits.
         ...(rackModel
@@ -739,6 +752,122 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                     </div>
                   )}
                 </Section>
+
+                {/* The device's utilisation metrics — the data side. A canvas
+                    node only picks which of these to draw; the values live here. */}
+                <section className="rounded-lg border border-[#30363d] bg-[#161b22] overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-[#30363d]">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold">
+                      <HeartPulse size={12} className="text-[#00d4ff]" />
+                      Metrics{metrics.length > 0 ? ` (${metrics.length})` : ''}
+                    </div>
+                    <button
+                      onClick={addMetric}
+                      className="flex items-center gap-1 text-[10px] text-[#00d4ff] hover:text-[#00d4ff]/80 transition-colors cursor-pointer"
+                    >
+                      <Plus size={10} /> Add
+                    </button>
+                  </div>
+                  <div className="p-2.5 flex flex-col gap-2">
+                    {metrics.length === 0 ? (
+                      <Empty>No metrics — click Add to register one (a drive's capacity, a CPU load, ...).</Empty>
+                    ) : (
+                      metrics.map((m, i) => (
+                        <div key={`${m.key || m.label || i}`} className="rounded-md border border-[#30363d] bg-[#21262d] p-2 flex flex-col gap-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              value={m.key ?? ''}
+                              onChange={(e) => updateMetric(i, { key: e.target.value })}
+                              placeholder="key (stable id)"
+                              className={`${INPUT} font-mono w-24 shrink-0`}
+                            />
+                            <Input
+                              value={m.label ?? ''}
+                              onChange={(e) => updateMetric(i, { label: e.target.value })}
+                              placeholder="label"
+                              className={`${INPUT} w-28 shrink-0`}
+                            />
+                            <Select value={m.kind ?? 'range'} onValueChange={(v) => updateMetric(i, { kind: v })}>
+                              <SelectTrigger className={`${INPUT} w-32 shrink-0`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="range">range (used/total)</SelectItem>
+                                <SelectItem value="value">value</SelectItem>
+                                <SelectItem value="status">status</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              value={m.unit ?? ''}
+                              onChange={(e) => updateMetric(i, { unit: e.target.value || null })}
+                              placeholder="unit"
+                              className={`${INPUT} w-16 shrink-0`}
+                            />
+                            <button
+                              onClick={() => removeMetric(i)}
+                              title="Remove metric"
+                              className="ml-auto text-[#8b949e] hover:text-[#f85149] cursor-pointer shrink-0"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                          {m.kind === 'status' ? (
+                            <Input
+                              value={typeof m.value === 'string' ? m.value : ''}
+                              onChange={(e) => updateMetric(i, { value: e.target.value })}
+                              placeholder="status (ok / warn / crit)"
+                              className={`${INPUT} font-mono`}
+                            />
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              {m.kind === 'range' && (
+                                <>
+                                  <Input
+                                    type="number"
+                                    value={m.used ?? ''}
+                                    onChange={(e) => updateMetric(i, { used: e.target.value === '' ? null : Number(e.target.value) })}
+                                    placeholder="used"
+                                    className={`${INPUT} font-mono w-20`}
+                                  />
+                                  <Input
+                                    type="number"
+                                    value={m.total ?? ''}
+                                    onChange={(e) => updateMetric(i, { total: e.target.value === '' ? null : Number(e.target.value) })}
+                                    placeholder="total"
+                                    className={`${INPUT} font-mono w-20`}
+                                  />
+                                </>
+                              )}
+                              {m.kind === 'value' && (
+                                <Input
+                                  type="number"
+                                  value={typeof m.value === 'number' ? m.value : ''}
+                                  onChange={(e) => updateMetric(i, { value: e.target.value === '' ? null : Number(e.target.value) })}
+                                  placeholder="value"
+                                  className={`${INPUT} font-mono w-20`}
+                                />
+                              )}
+                              <Input
+                                type="number"
+                                value={m.warn_at ?? ''}
+                                onChange={(e) => updateMetric(i, { warn_at: e.target.value === '' ? null : Number(e.target.value) })}
+                                placeholder="warn at"
+                                className={`${INPUT} font-mono w-20`}
+                              />
+                              <Input
+                                type="number"
+                                value={m.crit_at ?? ''}
+                                onChange={(e) => updateMetric(i, { crit_at: e.target.value === '' ? null : Number(e.target.value) })}
+                                placeholder="crit at"
+                                className={`${INPUT} font-mono w-20`}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
               </div>
             </div>
           ) : (

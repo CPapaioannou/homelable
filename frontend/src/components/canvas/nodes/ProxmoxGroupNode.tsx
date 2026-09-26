@@ -13,6 +13,7 @@ import { THEMES } from '@/utils/themes'
 import { BaseNode } from './BaseNode'
 import { SideHandles } from './SideHandles'
 import UtilizationBar from './UtilizationBar'
+import { selectedMetrics } from '@/utils/utilization'
 
 export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
   const { id, data, selected } = props
@@ -23,6 +24,9 @@ export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
   const hideIp = useCanvasStore((s) => s.hideIp)
   const theme = THEMES[activeTheme]
   const colors = resolveNodeColors(data, activeTheme)
+  // Which of the device's utilisation metrics this container draws — the node
+  // only picks; the values are the device's. Absent selection shows everything.
+  const shownMetrics = selectedMetrics(data.metrics, data.show_metrics)
 
   // Container mode is opt-in — a proxmox node renders as a regular card unless
   // it is explicitly a container (matches the rest of the codebase, which gates
@@ -106,9 +110,9 @@ export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
         </div>
 
         {/* Generic utilisation gauges under the container header, when set. */}
-        {data.metrics && data.metrics.length > 0 && (
+        {shownMetrics.length > 0 && (
           <div className="shrink-0" style={{ borderBottom: `1px solid ${glow}22` }}>
-            <UtilizationBar metrics={data.metrics} subtextColor={theme.colors.nodeSubtextColor} />
+            <UtilizationBar metrics={shownMetrics} subtextColor={theme.colors.nodeSubtextColor} />
           </div>
         )}
 

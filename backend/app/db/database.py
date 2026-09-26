@@ -561,6 +561,10 @@ async def init_db() -> None:
             # A zone or a group describes no device, so it has no inventory row to
             # keep its text on. Furniture keeps it here instead — see `Node.description`.
             ("nodes.description", "ALTER TABLE nodes ADD COLUMN description TEXT"),
+            # Which of the device's utilisation metrics this node draws — a list of
+            # metric keys. Node presentation only; the values are a device fact on
+            # the inventory row (`device_inventory.metrics`).
+            ("nodes.show_metrics", "ALTER TABLE nodes ADD COLUMN show_metrics JSON"),
         ):
             await _try_migrate(conn, sql, label=label)
         # 3.3.x — the inventory row owns the device's rack modelisation: the
@@ -634,6 +638,7 @@ _NODE_COLUMNS_SQL = (
     "design_id VARCHAR REFERENCES designs(id) ON DELETE SET NULL,"
     "device_id VARCHAR REFERENCES device_inventory(id) ON DELETE SET NULL,"
     "display_view JSON,"
+    "show_metrics JSON,"
     "pos_x FLOAT,"
     "pos_y FLOAT,"
     "parent_id VARCHAR REFERENCES nodes(id) ON DELETE CASCADE,"
@@ -653,7 +658,7 @@ _NODE_COLUMNS_SQL = (
 )
 
 _NODE_KEPT = (
-    "id, type, label, design_id, device_id, display_view, pos_x, pos_y, parent_id, container_mode, "
+    "id, type, label, design_id, device_id, display_view, show_metrics, pos_x, pos_y, parent_id, container_mode, "
     "custom_colors, custom_icon, description, show_port_numbers, width, height, bottom_handles, "
     "top_handles, left_handles, right_handles, created_at, updated_at"
 )

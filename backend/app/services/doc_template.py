@@ -282,26 +282,44 @@ def _to_number(value: Any) -> float | None:
 
 
 def _utilization_line(metric: Any) -> str | None:
-    """One utilisation line for a single gauge, or ``None`` when nothing is measurable.
+    """One document line for a single device metric, or ``None`` when nothing is measurable.
 
-    The raw values are printed as given (so an integer 8 stays "8", not "8.0");
-    only the percentage is derived from their numeric form.
+    The shape is open — decided by the fields present rather than a closed kind
+    enum, so a new metric shape renders here without a code change. A range
+    (``used``/``total``) prints ``used / total unit (pct%)``; a string ``value``
+    is a status and prints as-is; a numeric ``value`` is a single figure. Raw
+    values print as given (an integer 8 stays "8", not "8.0"); only the
+    percentage is derived from their numeric form.
     """
     if not isinstance(metric, dict):
         return None
-    label = str(metric.get("label") or "Utilisation")
+    label = str(metric.get("label") or metric.get("key") or "Metric")
+    unit = str(metric.get("unit") or "").strip()
+    suffix = f" {unit}" if unit else ""
+
     used_raw = metric.get("used")
     total_raw = metric.get("total")
-    unit = str(metric.get("unit") or "").strip()
+    value_raw = metric.get("value")
     used_f = _to_number(used_raw)
     total_f = _to_number(total_raw)
-    if used_f is None and total_f is None:
-        return None  # nothing measurable — skip the gauge rather than print "None / None"
-    if total_f is None or total_f == 0.0:
-        return f"- **{label}** — {used_raw} / {total_raw}{f' {unit}' if unit else ''}"
-    pct = round(used_f / total_f * 100) if used_f is not None else None
-    value = f"{used_raw} / {total_raw}{f' {unit}' if unit else ''}" + (f" ({pct}%)" if pct is not None else "")
-    return f"- **{label}** — {value}"
+
+    # Range: used / total, with a percentage when both are measurable.
+    if used_f is not None or total_f is not None:
+        if total_f is None or total_f == 0.0:
+            return f"- **{label}** — {used_raw} / {total_raw}{suffix}"
+        pct = round(used_f / total_f * 100) if used_f is not None else None
+        value = f"{used_raw} / {total_raw}{suffix}" + (f" ({pct}%)" if pct is not None else "")
+        return f"- **{label}** — {value}"
+
+    # Status: a string state (ok / warn / crit or free text).
+    if isinstance(value_raw, str) and value_raw.strip():
+        return f"- **{label}** — {value_raw.strip()}{suffix}"
+
+    # Value: a single measurable figure.
+    if _to_number(value_raw) is not None:
+        return f"- **{label}** — {value_raw}{suffix}"
+
+    return None  # nothing measurable — skip the metric rather than print "None"
 
 
 def block_utilization(device: Any, *, metrics: list[Any] | None = None, **_: Any) -> str:

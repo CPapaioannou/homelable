@@ -1907,3 +1907,33 @@ class TestNormalizeViewKey:
 
     def test_a_property_key_is_never_touched(self):
         assert normalize_view_key("rack", "properties") == "rack"
+
+
+@pytest.mark.asyncio
+async def test_hydrated_node_carries_device_metrics_and_node_show_metrics(db_session):
+    """Device metrics are a device fact hydrated flat onto the node; the
+    display selection (`show_metrics`) is node-local and normalised to a list."""
+    design_id = await _design(db_session)
+    device = InventoryDevice(
+        id="d-metrics",
+        ip="10.9.9.9",
+        metrics=[
+            {"key": "capacity", "label": "Capacity", "kind": "range", "used": 512, "total": 1000, "unit": "GB"},
+            {"key": "smart", "label": "SMART", "kind": "status", "value": "ok"},
+        ],
+    )
+    db_session.add(device)
+    await db_session.commit()
+
+    node = _node(design_id, device_id="d-metrics", show_metrics=["capacity"])
+    db_session.add(node)
+    await db_session.commit()
+
+    payload = hydrated_node(node, device)
+    assert payload["metrics"] == device.metrics
+    assert payload["show_metrics"] == ["capacity"]
+
+    # An unset selection normalises to an empty list on the wire.
+    node.show_metrics = None
+    payload = hydrated_node(node, device)
+    assert payload["show_metrics"] == []

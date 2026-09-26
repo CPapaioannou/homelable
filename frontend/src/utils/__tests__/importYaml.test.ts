@@ -81,6 +81,23 @@ describe('parseYamlToCanvas', () => {
     expect(nodes[0].data.metrics).toEqual([{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }])
   })
 
+  it('restores the node-local showMetrics selection', () => {
+    const yaml = `
+- nodeType: drive
+  label: "SSD 1"
+  metrics:
+    - key: "capacity"
+      label: "Storage"
+      used: 512
+      total: 1000
+      unit: "GB"
+  showMetrics:
+    - "capacity"
+`
+    const { nodes } = parseYamlToCanvas(yaml, empty, emptyEdges)
+    expect(nodes[0].data.show_metrics).toEqual(['capacity'])
+  })
+
   it('round-trips metrics through export then import', () => {
     const source: Node<NodeData>[] = [
       {
