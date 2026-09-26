@@ -64,6 +64,11 @@ class Node(Base):
     container_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     custom_colors: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     custom_icon: Mapped[str | None] = mapped_column(String, nullable=True)
+    # A generic utilisation gauge the card can draw (e.g. storage used/total on
+    # a drive, CPU or RAM on a host): {label, used, total, unit}. Presentation
+    # only, like custom_colors — the same device drawn on two canvases can
+    # carry two different gauges. NULL on every node without one.
+    metric: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     # What this piece of canvas furniture is for, in the user's words. Furniture
     # (group / groupRect / text) draws no device, so it has no inventory row to
     # carry a `notes` field — this column is that text's only home. NULL on every

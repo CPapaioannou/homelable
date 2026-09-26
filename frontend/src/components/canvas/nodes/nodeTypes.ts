@@ -6,7 +6,7 @@ import {
   ZwaveCoordinatorNode, ZwaveRouterNode, ZwaveEndDeviceNode,
   GridNode, UpsNode, BatteryNode, GeneratorNode, SolarPanelNode, InverterNode,
   CircuitBreakerNode, ContactorNode, ElectricalSwitchNode, SocketNode,
-  LightNode, MeterNode, TransformerNode, LoadNode,
+  LightNode, MeterNode, TransformerNode, LoadNode, DriveNode,
 } from './index'
 import { ProxmoxGroupNode } from './ProxmoxGroupNode'
 import { GroupRectNode } from './GroupRectNode'
@@ -58,4 +58,5 @@ export const nodeTypes = {
   meter: MeterNode,
   transformer: TransformerNode,
   load: LoadNode,
+  drive: DriveNode,
 }

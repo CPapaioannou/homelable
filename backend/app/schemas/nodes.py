@@ -27,6 +27,8 @@ class NodeBase(BaseModel):
     container_mode: bool = False
     custom_colors: dict[str, Any] | None = None
     custom_icon: str | None = None
+    # Generic utilisation gauge drawn on the card: {label, used, total, unit}.
+    metric: dict[str, Any] | None = None
     cpu_count: int | None = None
     cpu_model: str | None = None
     ram_gb: float | None = None
@@ -85,6 +87,7 @@ class NodeUpdate(BaseModel):
     container_mode: bool | None = None
     custom_colors: dict[str, Any] | None = None
     custom_icon: str | None = None
+    metric: dict[str, Any] | None = None
     cpu_count: int | None = None
     cpu_model: str | None = None
     ram_gb: float | None = None

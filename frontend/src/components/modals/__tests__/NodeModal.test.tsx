@@ -637,3 +637,53 @@ describe('NodeModal', () => {
     expect((screen.getByPlaceholderText('What this is for') as HTMLTextAreaElement).value).toBe('Three boxes.')
   })
 })
+
+// ── Utilization gauge section ──────────────────────────────────────
+
+describe('NodeModal — utilization gauge', () => {
+  it('shows the section for a device type', () => {
+    renderModal({ initial: BASE })
+    expect(screen.getByText('Utilization')).toBeDefined()
+  })
+
+  it('hides the section for canvas furniture', () => {
+    renderModal({ initial: { type: 'groupRect', label: 'Garage', services: [] } })
+    expect(screen.queryByText('Utilization')).toBeNull()
+  })
+
+  it('submits a metric filled in through the section', () => {
+    const { onSubmit } = renderModal({ initial: BASE })
+    fireEvent.change(screen.getByPlaceholderText('Storage / CPU / RAM'), { target: { value: 'Storage' } })
+    fireEvent.change(screen.getByPlaceholderText('GB / % / cores'), { target: { value: 'GB' } })
+    // The two numeric gauge fields, targeted by their placeholders.
+    fireEvent.change(screen.getByPlaceholderText('512'), { target: { value: '512' } })
+    fireEvent.change(screen.getByPlaceholderText('1000'), { target: { value: '1000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    const data = onSubmit.mock.calls[0][0] as Partial<NodeData>
+    expect(data.metric).toEqual({ label: 'Storage', used: 512, total: 1000, unit: 'GB' })
+  })
+
+  it('pre-fills and round-trips an existing metric untouched', () => {
+    const { onSubmit } = renderModal({
+      initial: { ...BASE, metric: { label: 'CPU', used: 60, total: 100, unit: '%' } },
+    })
+    expect(screen.getByDisplayValue('60')).toBeDefined()
+    expect(screen.getByDisplayValue('100')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    const data = onSubmit.mock.calls[0][0] as Partial<NodeData>
+    expect(data.metric).toEqual({ label: 'CPU', used: 60, total: 100, unit: '%' })
+  })
+
+  it('clears the metric through the Clear button', () => {
+    const { onSubmit } = renderModal({
+      initial: { ...BASE, metric: { label: 'Storage', used: 512, total: 1000, unit: 'GB' } },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    const data = onSubmit.mock.calls[0][0] as Partial<NodeData>
+    expect(data.metric).toBeNull()
+  })
+})

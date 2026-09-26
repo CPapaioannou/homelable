@@ -71,6 +71,7 @@ export type NodeType =
   | 'meter'
   | 'transformer'
   | 'load'
+  | 'drive'
 
 export type TextPosition =
   | 'top-left'
@@ -115,6 +116,20 @@ export interface NodeProperty {
   value: string
   icon: string | null
   visible: boolean
+}
+
+/**
+ * A generic utilisation gauge a node card can draw — storage used/total on a
+ * drive, CPU or RAM on a host, or any other used-vs-total quantity. The bar
+ * fills to `used / total`; a percentage gauge simply uses `total: 100`.
+ * Presentation only (like `custom_colors`): the same device drawn on two
+ * canvases may carry two different gauges.
+ */
+export interface UtilizationMetric {
+  label: string
+  used: number
+  total: number
+  unit: string
 }
 
 /**
@@ -230,6 +245,8 @@ export interface NodeData extends Record<string, unknown> {
   properties?: NodeProperty[]
   parent_id?: string
   container_mode?: boolean
+  /** Generic utilisation gauge for the card header bar; null/absent = no bar. */
+  metric?: UtilizationMetric | null
   custom_colors?: {
     border?: string
     background?: string
@@ -352,6 +369,7 @@ export const NODE_TYPE_LABELS: Record<NodeType, string> = {
   meter: 'Energy Meter',
   transformer: 'Transformer',
   load: 'Electrical Load',
+  drive: 'Drive',
 }
 
 export const STATUS_COLORS: Record<NodeStatus, string> = {

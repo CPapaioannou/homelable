@@ -146,6 +146,18 @@ describe('serializeNode — regular node', () => {
     expect(result.container_mode).toBe(false)
   })
 
+  it('serializes a utilization metric', () => {
+    const metric = { label: 'Storage', used: 512, total: 1000, unit: 'GB' }
+    const node = makeRfNode({ data: { label: 'SSD', type: 'drive', status: 'unknown', services: [], metric } })
+    const result = serializeNode(node)
+    expect(result.metric).toEqual(metric)
+  })
+
+  it('nulls the metric when absent', () => {
+    const result = serializeNode(makeRfNode())
+    expect(result.metric).toBeNull()
+  })
+
   it('nulls optional fields when absent', () => {
     const result = serializeNode(makeRfNode())
     expect(result.hostname).toBeNull()
@@ -384,6 +396,21 @@ describe('deserializeApiNode — regular node', () => {
     expect(result.data.bottom_handles).toBe(5)
     expect(result.data.left_handles).toBe(3)
     expect(result.data.right_handles).toBe(1)
+  })
+
+  it('restores a utilization metric from the API payload', () => {
+    const metric = { label: 'Storage', used: 512, total: 1000, unit: 'GB' }
+    const result = deserializeApiNode(makeApiNode({ metric: metric as unknown }), emptyMap)
+    expect(result.data.metric).toEqual(metric)
+  })
+
+  it('round-trips a metric through serialize then deserialize', () => {
+    const metric = { label: 'RAM', used: 12, total: 16, unit: 'GB' }
+    const wire = serializeNode(
+      makeRfNode({ data: { label: 'Host', type: 'server', status: 'unknown', services: [], metric } }),
+    )
+    const back = deserializeApiNode(wire as unknown as ApiNode, emptyMap)
+    expect(back.data.metric).toEqual(metric)
   })
 
   it('sets parentId and extent for children of container proxmox', () => {

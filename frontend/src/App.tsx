@@ -50,6 +50,7 @@ import { canvasApi, designsApi, liveviewApi } from '@/api/client'
 import * as standaloneStorage from '@/utils/standaloneStorage'
 import { demoNodes, demoEdges } from '@/utils/demoData'
 import { decideCanvasLoad, isNewUserCanvas } from '@/utils/canvasLoadDecision'
+import { defaultNodeProperties } from '@/utils/nodeDefaults'
 import { WalkthroughActionsProvider, type WalkthroughActionApi } from '@/walkthrough/actions'
 import { WalkthroughInvite } from '@/walkthrough/WalkthroughInvite'
 import { WalkthroughOverlay } from '@/walkthrough/WalkthroughOverlay'
@@ -584,11 +585,20 @@ export default function App() {
       ? { x: parentNode.position.x + 20, y: parentNode.position.y + 50 }
       : getCenteredPosition(isContainerNode ? 300 : 0, isContainerNode ? 200 : 0)
 
+    const nodeType = data.type ?? 'generic'
+    // A new node of a type with known default properties (e.g. a drive's
+    // media + serial) seeds them unless the caller supplied its own.
+    const seedProps = defaultNodeProperties(nodeType)
     const newNode: Node<NodeData> = {
       id,
-      type: data.type ?? 'generic',
+      type: nodeType,
       position,
-      data: { status: 'unknown', services: [], ...data } as NodeData,
+      data: {
+        status: 'unknown',
+        services: [],
+        ...(seedProps && !data.properties ? { properties: seedProps } : {}),
+        ...data,
+      } as NodeData,
       ...(isContainerNode ? { width: 300, height: 200 } : {}),
     }
     addNode(newNode)

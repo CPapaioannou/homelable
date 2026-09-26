@@ -274,6 +274,40 @@ def block_properties(device: Any, **_: Any) -> str:
     return "\n".join(lines)
 
 
+def _to_number(value: Any) -> float | None:
+    """A JSON number as a float, else None. Booleans are not measurements."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def block_utilization(device: Any, *, metric: dict[str, Any] | None = None, **_: Any) -> str:
+    """The utilisation gauge a canvas node wears (a drive's storage, a host's CPU/RAM).
+
+    The metric is presentation, so it lives on the node, not the inventory row —
+    the caller passes it in via context. Empty when there is nothing to show,
+    which drops the whole section from the document. The raw values are printed
+    as given (so an integer 8 stays "8", not "8.0"); only the percentage is
+    derived from their numeric form.
+    """
+    if not isinstance(metric, dict):
+        return ""
+    label = str(metric.get("label") or "Utilisation")
+    used_raw = metric.get("used")
+    total_raw = metric.get("total")
+    unit = str(metric.get("unit") or "").strip()
+    used_f = _to_number(used_raw)
+    total_f = _to_number(total_raw)
+    if used_f is None and total_f is None:
+        return ""  # nothing measurable — drop the section rather than print "None / None"
+    if total_f is None or total_f == 0.0:
+        return f"- **{label}** — {used_raw} / {total_raw}{f' {unit}' if unit else ''}"
+    pct = round(used_f / total_f * 100) if used_f is not None else None
+    value = f"{used_raw} / {total_raw}{f' {unit}' if unit else ''}" + (f" ({pct}%)" if pct is not None else "")
+    return f"- **{label}** — {value}"
+
+
+
 def block_rack(device: Any, *, rack: dict[str, Any] | None = None, zone_label: str | None = None, **_: Any) -> str:
     parts: list[str] = []
     if rack and rack.get("name"):
@@ -323,6 +357,7 @@ BLOCKS: dict[str, Callable[..., str]] = {
     "hardware": block_hardware,
     "services": block_services,
     "properties": block_properties,
+    "utilization": block_utilization,
     "rack": block_rack,
     "network": block_network,
 }
@@ -403,6 +438,7 @@ def render_device_document(
     zone_label: str | None = None,
     rack: dict[str, Any] | None = None,
     connections: list[str] | None = None,
+    metric: dict[str, Any] | None = None,
     today: date | None = None,
 ) -> str:
     """The full skeleton for a device, old notes appended verbatim."""
@@ -440,6 +476,10 @@ def render_device_document(
         block_hardware(device),
         "",
     ]
+
+    utilization = block_utilization(device, metric=metric)
+    if utilization:
+        parts += ["### Utilization", "", utilization, ""]
 
     location = block_rack(device, rack=rack, zone_label=zone_label)
     if location:

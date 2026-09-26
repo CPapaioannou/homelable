@@ -12,6 +12,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { THEMES } from '@/utils/themes'
 import { BaseNode } from './BaseNode'
 import { SideHandles } from './SideHandles'
+import UtilizationBar from './UtilizationBar'
 
 export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
   const { id, data, selected } = props
@@ -103,6 +104,13 @@ export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
             title={data.status}
           />
         </div>
+
+        {/* Generic utilisation gauge under the container header, when set. */}
+        {data.metric && (
+          <div className="shrink-0" style={{ borderBottom: `1px solid ${glow}22` }}>
+            <UtilizationBar metric={data.metric} subtextColor={theme.colors.nodeSubtextColor} />
+          </div>
+        )}
 
         {/* Properties */}
         {data.properties?.filter((p) => p.visible).map((prop, i, arr) => {

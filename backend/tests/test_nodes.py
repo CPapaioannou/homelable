@@ -179,6 +179,48 @@ async def test_update_node_container_mode(client: AsyncClient, headers: dict):
     assert res.json()["container_mode"] is True
 
 
+# --- Metric (generic utilisation gauge) tests ---
+
+METRIC = {"label": "Storage", "used": 512, "total": 1000, "unit": "GB"}
+
+
+async def test_create_node_with_metric(client: AsyncClient, headers: dict):
+    payload = {"type": "drive", "label": "SSD 1", "status": "unknown", "metric": METRIC}
+    res = await client.post("/api/v1/nodes", json=payload, headers=headers)
+    assert res.status_code == 201
+    assert res.json()["metric"] == METRIC
+
+
+async def test_create_node_metric_defaults_to_null(client: AsyncClient, headers: dict):
+    res = await client.post("/api/v1/nodes", json={"type": "server", "label": "N", "status": "unknown"}, headers=headers)
+    assert res.status_code == 201
+    assert res.json()["metric"] is None
+
+
+async def test_update_node_metric(client: AsyncClient, headers: dict):
+    create = await client.post("/api/v1/nodes", json={"type": "server", "label": "N", "status": "unknown"}, headers=headers)
+    node_id = create.json()["id"]
+    res = await client.patch(f"/api/v1/nodes/{node_id}", json={"metric": METRIC}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["metric"] == METRIC
+
+
+async def test_update_node_clears_metric_with_null(client: AsyncClient, headers: dict):
+    create = await client.post("/api/v1/nodes", json={"type": "server", "label": "N", "status": "unknown", "metric": METRIC}, headers=headers)
+    node_id = create.json()["id"]
+    res = await client.patch(f"/api/v1/nodes/{node_id}", json={"metric": None}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["metric"] is None
+
+
+async def test_update_node_without_metric_does_not_wipe(client: AsyncClient, headers: dict):
+    create = await client.post("/api/v1/nodes", json={"type": "server", "label": "N", "status": "unknown", "metric": METRIC}, headers=headers)
+    node_id = create.json()["id"]
+    res = await client.patch(f"/api/v1/nodes/{node_id}", json={"label": "Renamed"}, headers=headers)
+    assert res.status_code == 200
+    assert res.json()["metric"] == METRIC
+
+
 async def test_update_node_parent_id(client: AsyncClient, headers: dict):
     parent = await client.post("/api/v1/nodes", json={"type": "proxmox", "label": "PVE", "status": "unknown"}, headers=headers)
     parent_id = parent.json()["id"]

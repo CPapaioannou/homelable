@@ -189,6 +189,47 @@ def test_property_map_keeps_the_first_of_a_repeated_key():
     assert t.property_map(device)["ram"] == "first"
 
 
+# ── the utilisation gauge ─────────────────────────────────────────────────────
+
+def test_utilization_block_prints_used_over_total_with_percent():
+    md = t.block_utilization(_device(), metric={"label": "Storage", "used": 512, "total": 1000, "unit": "GB"})
+    assert "**Storage**" in md
+    assert "512 / 1000 GB (51%)" in md
+
+
+def test_utilization_block_rounds_the_percent():
+    md = t.block_utilization(_device(), metric={"label": "CPU", "used": 63, "total": 100, "unit": "%"})
+    assert "63 / 100 % (63%)" in md
+
+
+def test_utilization_block_omits_the_percent_when_the_total_is_zero():
+    md = t.block_utilization(_device(), metric={"label": "RAM", "used": 8, "total": 0, "unit": "GB"})
+    assert "8 / 0 GB" in md
+    assert "(0%)" not in md
+
+
+def test_utilization_block_is_empty_without_a_metric():
+    assert t.block_utilization(_device()) == ""
+
+
+def test_utilization_block_drops_a_malformed_metric():
+    assert t.block_utilization(_device(), metric={"label": "X"}) == ""
+
+
+def test_device_document_includes_utilization_when_a_metric_is_set():
+    doc = t.render_device_document(
+        _device(),
+        metric={"label": "Storage", "used": 512, "total": 1000, "unit": "GB"},
+    )
+    assert "### Utilization" in doc
+    assert "512 / 1000 GB (51%)" in doc
+
+
+def test_device_document_omits_utilization_without_a_metric():
+    doc = t.render_device_document(_device())
+    assert "### Utilization" not in doc
+
+
 # ── the snapshot follows what the tables print ──────────────────────────────
 
 

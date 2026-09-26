@@ -14,6 +14,7 @@ import { maskIp, primaryIp, splitIps } from '@/utils/maskIp'
 import { sideHandleCount } from '@/utils/handleUtils'
 import { SideHandles } from './SideHandles'
 import { getServiceUrl } from '@/utils/serviceUrl'
+import UtilizationBar from './UtilizationBar'
 
 interface BaseNodeProps extends NodeProps<Node<NodeData>> {
   icon: LucideIcon
@@ -138,6 +139,15 @@ export function BaseNode({ id, data, selected, icon: typeIcon, width, height }: 
           ))}
         </div>
       </div>
+
+      {/* Generic utilisation gauge (e.g. a drive's storage bar) — any node
+          type can wear one; driven purely by the optional `metric` field. */}
+      {data.metric && (
+        <>
+          <div style={{ height: 1, background: `${colors.border}44`, margin: '0 8px' }} />
+          <UtilizationBar metric={data.metric} subtextColor={theme.colors.nodeSubtextColor} />
+        </>
+      )}
 
       {/* Properties section (new system) */}
       {visibleProperties && visibleProperties.length > 0 && (

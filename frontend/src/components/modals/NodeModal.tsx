@@ -148,6 +148,14 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
   const set = (key: keyof NodeData, value: unknown) =>
     setForm((f) => ({ ...f, [key]: value }))
 
+  // Edit one field of the optional utilisation gauge, creating a default shape
+  // on first touch. Empty numeric fields read as 0 so the gauge degrades to an
+  // empty bar rather than NaN.
+  const updateMetric = (patch: Partial<NonNullable<NodeData['metric']>>,
+    base: NonNullable<NodeData['metric']> = { label: '', used: 0, total: 0, unit: '' }) =>
+    setForm((f) => ({ ...f, metric: { ...base, ...f.metric, ...patch } }))
+  const clearMetric = () => setForm((f) => ({ ...f, metric: null }))
+
   const customStyle = useThemeStore((s) => s.customStyle)
   // Effective default count for a side: the per-type style default if set,
   // otherwise the intrinsic side default (top/bottom → 1, left/right → 0).
@@ -591,6 +599,71 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
                       style={{ left: form.show_port_numbers ? 'calc(100% - 18px)' : '2px' }}
                     />
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Utilisation gauge — any device type can wear one (storage on a
+                drive, CPU/RAM on a host). Furniture (group/groupRect/text) is
+                excluded: it draws no device, so there is nothing to measure. */}
+            {!isFurniture && (
+              <div className="flex flex-col gap-2.5 col-span-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Utilization</Label>
+                  {form.metric && (
+                    <button
+                      type="button"
+                      onClick={clearMetric}
+                      className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground/60">
+                  Optional — a green/amber/red bar under the node header (red at ≥ 90 %).
+                </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Gauge label</Label>
+                    <Input
+                      value={form.metric?.label ?? ''}
+                      onChange={(e) => updateMetric({ label: e.target.value })}
+                      placeholder="Storage / CPU / RAM"
+                      className={`bg-[#21262d] border-[#30363d] text-sm h-8 ${modalStyles['modal-radius']}`}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Unit</Label>
+                    <Input
+                      value={form.metric?.unit ?? ''}
+                      onChange={(e) => updateMetric({ unit: e.target.value })}
+                      placeholder="GB / % / cores"
+                      className={`bg-[#21262d] border-[#30363d] text-sm h-8 ${modalStyles['modal-radius']}`}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Used</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.metric?.used ?? 0}
+                      onChange={(e) => updateMetric({ used: Number(e.target.value) || 0 })}
+                      placeholder="512"
+                      className={`bg-[#21262d] border-[#30363d] font-mono text-sm h-8 ${modalStyles['modal-radius']}`}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs text-muted-foreground">Total</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.metric?.total ?? 0}
+                      onChange={(e) => updateMetric({ total: Number(e.target.value) || 0 })}
+                      placeholder="1000"
+                      className={`bg-[#21262d] border-[#30363d] font-mono text-sm h-8 ${modalStyles['modal-radius']}`}
+                    />
+                  </div>
                 </div>
               </div>
             )}

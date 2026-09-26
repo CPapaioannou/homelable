@@ -16,6 +16,7 @@ export const NODE_TYPE_GROUPS: { label: string; types: NodeType[] }[] = [
   { label: 'Z-Wave',         types: ['zwave_coordinator', 'zwave_router', 'zwave_enddevice'] },
   { label: 'Personal',       types: ['computer', 'laptop', 'mobile'] },
   { label: 'Electrical',     types: ['grid', 'ups', 'battery', 'generator', 'solar_panel', 'inverter', 'circuit_breaker', 'contactor', 'electrical_switch', 'socket', 'light', 'meter', 'transformer', 'load'] },
+  { label: 'Storage',        types: ['drive'] },
   { label: 'Generic',        types: ['generic', 'groupRect'] },
 ]
 
