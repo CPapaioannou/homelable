@@ -363,6 +363,39 @@ describe('CanvasContainer', () => {
     expect(onRequestAddToContainer).not.toHaveBeenCalled()
   })
 
+  it('targets the deepest nested container when a drop intersects several', () => {
+    const onRequestAddToContainer = vi.fn()
+    const outer = containerNode('outer')
+    const inner = {
+      ...containerNode('inner'),
+      parentId: 'outer',
+      data: { ...containerNode('inner').data, parent_id: 'outer' },
+    }
+    const dragged = makeNode('n1')
+    useCanvasStore.setState({ nodes: [outer, inner, dragged] })
+    // Canvas order lists the outer container first; the inner one is the drop target.
+    rf.intersecting = [outer, inner]
+    render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged, [dragged])
+    expect(onRequestAddToContainer).toHaveBeenCalledWith({ nodeIds: ['n1'], containerId: 'inner' })
+  })
+
+  it('targets the deepest zone when nested zones intersect', () => {
+    const onRequestAddToZone = vi.fn()
+    const outerZone = zoneNode('zOuter')
+    const innerZone = {
+      ...zoneNode('zInner'),
+      parentId: 'zOuter',
+      data: { ...zoneNode('zInner').data, parent_id: 'zOuter' },
+    }
+    const dragged = makeNode('n1')
+    useCanvasStore.setState({ nodes: [outerZone, innerZone, dragged] })
+    rf.intersecting = [outerZone, innerZone]
+    render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged, [dragged])
+    expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1'], zoneId: 'zInner' })
+  })
+
   it('keeps an already-parented node in the selection with its own parent', () => {
     const onRequestAddToZone = vi.fn()
     const dragged = [makeNode('n1'), { ...makeNode('n2'), parentId: 'pxOther' }]

@@ -208,8 +208,37 @@ export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, o
             return canReparent(hierarchyNodes, id, target.id)
               && (allowZones || child?.data.type !== 'groupRect')
           })
-        const group = intersecting.find((n) => n.data.type === 'group' && eligibleFor(n, false))
-        const container = intersecting.find((n) => n.data.container_mode === true && eligibleFor(n, true))
+        // The intersection list is in canvas order, not depth order. A drop
+        // that reaches a nested container must target the innermost one, so
+        // within a class the deepest eligible candidate wins (ties keep the
+        // earlier list order).
+        const byId = new Map(hierarchyNodes.map((n) => [n.id, n]))
+        const depthOf = (node: Node<NodeData>): number => {
+          let depth = 0
+          const seen = new Set([node.id])
+          let id = node.parentId
+          while (id && !seen.has(id)) {
+            seen.add(id)
+            depth++
+            id = byId.get(id)?.parentId
+          }
+          return depth
+        }
+        const deepestEligible = (isClass: (n: Node<NodeData>) => boolean, allowZones: boolean) => {
+          let best: Node<NodeData> | undefined
+          let bestDepth = -1
+          for (const candidate of intersecting) {
+            if (!isClass(candidate) || !eligibleFor(candidate, allowZones)) continue
+            const depth = depthOf(candidate)
+            if (depth > bestDepth) {
+              best = candidate
+              bestDepth = depth
+            }
+          }
+          return best
+        }
+        const group = deepestEligible((n) => n.data.type === 'group', false)
+        const container = deepestEligible((n) => n.data.container_mode === true, true)
         const validIds = (targetId: string, allowZones: boolean) => nodeIds.filter((id) => {
           const child = nodes.find((n) => n.id === id)
           return canReparent(hierarchyNodes, id, targetId)
@@ -225,7 +254,7 @@ export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, o
         } else {
           // Zones come last: they are the loosest container and the largest, so
           // a group/container inside one still wins the drop.
-          const zone = intersecting.find((n) => n.data.type === 'groupRect' && eligibleFor(n, true))
+          const zone = deepestEligible((n) => n.data.type === 'groupRect', true)
           if (zone) {
             const ids = validIds(zone.id, true)
             if (ids.length > 0) onRequestAddToZone?.({ nodeIds: ids, zoneId: zone.id })
