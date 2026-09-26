@@ -309,7 +309,7 @@ export default function App() {
     setIsNewUser(isNewUserCanvas(mode))
     // Record provenance so autosave writes back under the design just loaded.
     setLoadedDesignId(designId ?? null)
-  }, [loadCanvas, setTheme, setCustomStyle, setFloorMap])
+  }, [loadCanvas, markUnsaved, setTheme, setCustomStyle, setFloorMap])
 
   // Standalone counterpart of loadCanvasFromApi — reads a design's canvas from
   // localStorage, falling back to the demo canvas when it has never been saved.
@@ -343,7 +343,7 @@ export default function App() {
     setIsNewUser(isNewUserCanvas(mode))
     // Record provenance so autosave writes back under the design just loaded.
     setLoadedDesignId(designId)
-  }, [loadCanvas, markUnsaved, setTheme, setCustomStyle, setFloorMap])
+  }, [loadCanvas, setTheme, setCustomStyle, setFloorMap])
 
   /**
    * Load whichever canvas the design holds. Rack designs bypass the node/edge
