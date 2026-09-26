@@ -42,6 +42,10 @@ describe('CustomStyleModal', () => {
     expect(screen.getByText('Hardware')).toBeDefined()
     expect(screen.getByText('Zigbee')).toBeDefined()
     expect(screen.getByText('Z-Wave')).toBeDefined()
+    expect(screen.getByText('Storage')).toBeDefined()
+    // A drive is selectable from its Storage category.
+    fireEvent.click(screen.getByRole('button', { name: 'Drive' }))
+    expect(screen.getByText(/Apply to existing Drive/)).toBeDefined()
     // A Z-Wave node type is selectable from its category.
     fireEvent.click(screen.getByRole('button', { name: /Z-Wave Controller/ }))
     expect(screen.getByText(/Apply to existing Z-Wave Controller/)).toBeDefined()
