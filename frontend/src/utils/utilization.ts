@@ -70,6 +70,7 @@ export function utilizationColor(percent: number, warnAt?: number, critAt?: numb
   return COLORS.green
 }
 
+
 /** The range fill ratio, clamped to 0..100. A zero/negative total reads as 0. */
 export function metricPercent(metric: UtilizationMetric): number {
   if (metricShape(metric) !== 'range') return 0
@@ -84,13 +85,26 @@ export function metricBarPercent(metric: UtilizationMetric): number {
 }
 
 /**
- * The colour for a whole metric, by shape + thresholds. Range compares the
- * used/total percent to warn_at/crit_at (as percentages); value compares the
- * raw figure to warn_at/crit_at (as absolute values); status maps its state.
+ * The colour for a whole metric, by shape + thresholds.
+ *
+ * A threshold is always in the metric's own units: for a range it is an
+ * absolute figure in the used/total unit ("warn at 1800 GB"), for a value it
+ * is a figure in the value's unit. When the user leaves a threshold blank the
+ * range falls back to the 70 % / 90 % -of-total defaults, which is exactly the
+ * old percent-based behaviour. Status maps its state to a colour.
  */
 export function metricColor(metric: UtilizationMetric): string {
   const shape = metricShape(metric)
-  if (shape === 'range') return utilizationColor(metricPercent(metric), metric.warn_at, metric.crit_at)
+  if (shape === 'range') {
+    const used = metric.used ?? 0
+    // Absolute used-space thresholds if set; otherwise the 70 % / 90 % -of-total
+    // defaults (identical to the previous percent-based colouring).
+    const warn = metric.warn_at ?? (metric.total ? (metric.total * UTILIZATION_THRESHOLDS.warning) / 100 : undefined)
+    const crit = metric.crit_at ?? (metric.total ? (metric.total * UTILIZATION_THRESHOLDS.critical) / 100 : undefined)
+    if (crit != null && used >= crit) return COLORS.red
+    if (warn != null && used >= warn) return COLORS.amber
+    return COLORS.green
+  }
   if (shape === 'value') {
     const v = Number(metric.value)
     const warn = metric.warn_at ?? UTILIZATION_THRESHOLDS.warning

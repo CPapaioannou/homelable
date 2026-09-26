@@ -123,6 +123,18 @@ describe('UtilizationBar (by kind)', () => {
     expect(barColor(c2)).toBe(RED)
   })
 
+  it('treats a range\'s thresholds as absolute used-space values (not a percent)', () => {
+    // used 1900 of 2000 with crit_at 1900 is at the critical level -> red, even
+    // though 95 % would be the percent reading. This is the "drive nearly full" case.
+    const at = (used: number) => render(<UtilizationBar metrics={[{ label: 'D', used, total: 2000, warn_at: 1800, crit_at: 1900 }]} />)
+    const { container: red } = at(1900)
+    expect(barColor(red)).toBe(RED)
+    const { container: amber } = at(1850)
+    expect(barColor(amber)).toBe(AMBER)
+    const { container: green } = at(1700)
+    expect(barColor(green)).toBe(GREEN)
+  })
+
   it('dims and flags a stale metric', () => {
     const stale = { key: 'd', label: 'D', used: 10, total: 100, updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() }
     const { container } = render(<UtilizationBar metrics={[stale]} subtextColor="#888" />)

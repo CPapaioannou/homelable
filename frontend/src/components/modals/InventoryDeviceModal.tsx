@@ -217,6 +217,59 @@ function Field({ label, hint, children, className = '' }: { label: string; hint?
   )
 }
 
+/** A labelled number input for the metrics editor (used/total/warn/crit). */
+function MetricNumField({
+  label,
+  value,
+  onValue,
+  placeholder,
+}: {
+  label: string
+  value: number | undefined
+  onValue: (v: number | undefined) => void
+  placeholder?: string
+}) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="text-[9px] font-medium uppercase tracking-wide text-[#8b949e]">{label}</span>
+      <Input
+        type="number"
+        value={value ?? ''}
+        onChange={(e) => onValue(e.target.value === '' ? undefined : Number(e.target.value))}
+        placeholder={placeholder}
+        className={`${INPUT} font-mono`}
+      />
+    </label>
+  )
+}
+
+/** A labelled text input for the metrics editor (key/label/unit). */
+function MetricTextField({
+  label,
+  value,
+  onValue,
+  placeholder,
+  mono = false,
+}: {
+  label: string
+  value: string
+  onValue: (v: string) => void
+  placeholder?: string
+  mono?: boolean
+}) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="text-[9px] font-medium uppercase tracking-wide text-[#8b949e]">{label}</span>
+      <Input
+        value={value}
+        onChange={(e) => onValue(e.target.value)}
+        placeholder={placeholder}
+        className={`${INPUT}${mono ? ' font-mono' : ''}`}
+      />
+    </label>
+  )
+}
+
 /** The editable subset of an inventory row, as strings for the form inputs. */
 interface EditForm {
   label: string
@@ -773,43 +826,47 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                       <Empty>No metrics — click Add to register one (a drive's capacity, a CPU load, ...).</Empty>
                     ) : (
                       metrics.map((m, i) => (
-                        <div key={`${m.key || m.label || i}`} className="rounded-md border border-[#30363d] bg-[#21262d] p-2 flex flex-col gap-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <Input
+                        <div key={`${m.key || m.label || i}`} className="relative rounded-md border border-[#30363d] bg-[#21262d] p-2.5 pr-8 flex flex-col gap-2">
+                          <button
+                            onClick={() => removeMetric(i)}
+                            title="Remove metric"
+                            className="absolute right-2 top-2 text-[#8b949e] hover:text-[#f85149] cursor-pointer"
+                          >
+                            <X size={12} />
+                          </button>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <MetricTextField
+                              label="Key"
+                              mono
                               value={m.key ?? ''}
-                              onChange={(e) => updateMetric(i, { key: e.target.value })}
-                              placeholder="key (stable id)"
-                              className={`${INPUT} font-mono w-24 shrink-0`}
+                              onValue={(v) => updateMetric(i, { key: v })}
+                              placeholder="stable id"
                             />
-                            <Input
+                            <MetricTextField
+                              label="Label"
                               value={m.label ?? ''}
-                              onChange={(e) => updateMetric(i, { label: e.target.value })}
-                              placeholder="label"
-                              className={`${INPUT} w-28 shrink-0`}
+                              onValue={(v) => updateMetric(i, { label: v })}
+                              placeholder="Capacity"
                             />
-                            <Select value={m.kind ?? 'range'} onValueChange={(v) => { if (v != null) updateMetric(i, { kind: v }) }}>
-                              <SelectTrigger className={`${INPUT} w-32 shrink-0`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="range">range (used/total)</SelectItem>
-                                <SelectItem value="value">value</SelectItem>
-                                <SelectItem value="status">status</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Input
+                            <label className="flex min-w-0 flex-1 flex-col gap-1">
+                              <span className="text-[9px] font-medium uppercase tracking-wide text-[#8b949e]">Kind</span>
+                              <Select value={m.kind ?? 'range'} onValueChange={(v) => { if (v != null) updateMetric(i, { kind: v }) }}>
+                                <SelectTrigger className={INPUT}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="range">range (used/total)</SelectItem>
+                                  <SelectItem value="value">value</SelectItem>
+                                  <SelectItem value="status">status</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </label>
+                            <MetricTextField
+                              label="Unit"
                               value={m.unit ?? ''}
-                              onChange={(e) => updateMetric(i, { unit: e.target.value || undefined })}
-                              placeholder="unit"
-                              className={`${INPUT} w-16 shrink-0`}
+                              onValue={(v) => updateMetric(i, { unit: v || undefined })}
+                              placeholder="GB / %"
                             />
-                            <button
-                              onClick={() => removeMetric(i)}
-                              title="Remove metric"
-                              className="ml-auto text-[#8b949e] hover:text-[#f85149] cursor-pointer shrink-0"
-                            >
-                              <X size={12} />
-                            </button>
                           </div>
                           {m.kind === 'status' ? (
                             <Input
@@ -819,47 +876,29 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                               className={`${INPUT} font-mono`}
                             />
                           ) : (
-                            <div className="flex items-center gap-1.5">
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                               {m.kind === 'range' && (
                                 <>
-                                  <Input
-                                    type="number"
-                                    value={m.used ?? ''}
-                                    onChange={(e) => updateMetric(i, { used: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                    placeholder="used"
-                                    className={`${INPUT} font-mono w-20`}
-                                  />
-                                  <Input
-                                    type="number"
-                                    value={m.total ?? ''}
-                                    onChange={(e) => updateMetric(i, { total: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                    placeholder="total"
-                                    className={`${INPUT} font-mono w-20`}
-                                  />
+                                  <MetricNumField label={`Used${m.unit ? ` (${m.unit})` : ''}`} value={m.used} onValue={(v) => updateMetric(i, { used: v })} />
+                                  <MetricNumField label={`Total${m.unit ? ` (${m.unit})` : ''}`} value={m.total} onValue={(v) => updateMetric(i, { total: v })} />
                                 </>
                               )}
                               {m.kind === 'value' && (
-                                <Input
-                                  type="number"
-                                  value={typeof m.value === 'number' ? m.value : ''}
-                                  onChange={(e) => updateMetric(i, { value: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                  placeholder="value"
-                                  className={`${INPUT} font-mono w-20`}
+                                <MetricNumField
+                                  label={`Value${m.unit ? ` (${m.unit})` : ''}`}
+                                  value={typeof m.value === 'number' ? m.value : undefined}
+                                  onValue={(v) => updateMetric(i, { value: v })}
                                 />
                               )}
-                              <Input
-                                type="number"
-                                value={m.warn_at ?? ''}
-                                onChange={(e) => updateMetric(i, { warn_at: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                placeholder="warn at"
-                                className={`${INPUT} font-mono w-20`}
+                              <MetricNumField
+                                label={`Warn at${m.unit ? ` (${m.unit})` : ''}`}
+                                value={m.warn_at}
+                                onValue={(v) => updateMetric(i, { warn_at: v })}
                               />
-                              <Input
-                                type="number"
-                                value={m.crit_at ?? ''}
-                                onChange={(e) => updateMetric(i, { crit_at: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                placeholder="crit at"
-                                className={`${INPUT} font-mono w-20`}
+                              <MetricNumField
+                                label={`Crit at${m.unit ? ` (${m.unit})` : ''}`}
+                                value={m.crit_at}
+                                onValue={(v) => updateMetric(i, { crit_at: v })}
                               />
                             </div>
                           )}
