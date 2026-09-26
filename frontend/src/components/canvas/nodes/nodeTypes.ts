@@ -1,5 +1,5 @@
 import {
-  IspNode, RouterNode, FirewallNode, SwitchNode, ServerNode, VmNode, LxcNode,
+  IspNode, RouterNode, FirewallNode, SwitchNode, ServerNode, ProxmoxNode, VmNode, LxcNode,
   NasNode, KvmNode, IotNode, ApNode, CameraNode, PrinterNode, ComputerNode, LaptopNode,
   MobileNode, CplNode, DockerHostNode, DockerContainerNode, GenericNode,
   ZigbeeCoordinatorNode, ZigbeeRouterNode, ZigbeeEndDeviceNode,
@@ -8,7 +8,6 @@ import {
   CircuitBreakerNode, ContactorNode, ElectricalSwitchNode, SocketNode,
   LightNode, MeterNode, TransformerNode, LoadNode,
 } from './index'
-import { ProxmoxGroupNode } from './ProxmoxGroupNode'
 import { GroupRectNode } from './GroupRectNode'
 import { GroupNode } from './GroupNode'
 import { TextNode } from './TextNode'
@@ -19,7 +18,7 @@ export const nodeTypes = {
   firewall: FirewallNode,
   switch: SwitchNode,
   server: ServerNode,
-  proxmox: ProxmoxGroupNode,
+  proxmox: ProxmoxNode,
   vm: VmNode,
   lxc: LxcNode,
   nas: NasNode,

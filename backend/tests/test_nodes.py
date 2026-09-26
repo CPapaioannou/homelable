@@ -189,6 +189,38 @@ async def test_update_node_parent_id(client: AsyncClient, headers: dict):
     assert res.json()["parent_id"] == parent_id
 
 
+async def test_update_node_rejects_a_multi_node_cycle(client: AsyncClient, headers: dict):
+    outer = (
+        await client.post(
+            "/api/v1/nodes",
+            json={"type": "generic", "label": "Outer", "status": "unknown", "container_mode": True},
+            headers=headers,
+        )
+    ).json()
+    inner = (
+        await client.post(
+            "/api/v1/nodes",
+            json={
+                "type": "proxmox",
+                "label": "Inner",
+                "status": "unknown",
+                "container_mode": True,
+                "parent_id": outer["id"],
+            },
+            headers=headers,
+        )
+    ).json()
+
+    res = await client.patch(
+        f"/api/v1/nodes/{outer['id']}",
+        json={"parent_id": inner["id"]},
+        headers=headers,
+    )
+
+    assert res.status_code == 409
+    assert set(res.json()["detail"]["node_ids"]) == {outer["id"], inner["id"]}
+
+
 async def test_create_node_requires_auth(client: AsyncClient):
     res = await client.post("/api/v1/nodes", json={"type": "server", "label": "N", "status": "unknown"})
     assert res.status_code == 401

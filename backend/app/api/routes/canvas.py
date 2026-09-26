@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.services.inventory_sync import (
     load_devices_for,
     node_columns,
 )
+from app.services.node_hierarchy import HierarchyError, validate_hierarchy
 
 router = APIRouter()
 
@@ -66,6 +67,14 @@ async def save_canvas(
         db.add(new_design)
         await db.flush()
         design_id = new_design.id
+
+    try:
+        validate_hierarchy(body.nodes)
+    except HierarchyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT if exc.cycle else status.HTTP_400_BAD_REQUEST,
+            detail=exc.detail() if exc.cycle else exc.message,
+        ) from exc
 
     incoming_node_ids = {n.id for n in body.nodes}
     incoming_edge_ids = {e.id for e in body.edges}

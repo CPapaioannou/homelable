@@ -35,7 +35,7 @@ describe('canvasStore — containers & nesting', () => {
     expect(childNode?.parentId).toBeUndefined()
 
     useCanvasStore.getState().updateNode('p1', { container_mode: true })
-    useCanvasStore.getState().setProxmoxContainerMode('p1', true)
+    useCanvasStore.getState().setContainerMode('p1', true)
     const nested = useCanvasStore.getState().nodes.find((n) => n.id === 'c1')
     expect(nested?.parentId).toBe('p1')
     expect(nested?.extent).toBe('parent')
@@ -178,31 +178,31 @@ describe('canvasStore — containers & nesting', () => {
     expect(child?.extent).toBe('parent')
   })
 
-  it('setProxmoxContainerMode ON sets width/height for docker_host (not just proxmox)', () => {
+  it('setContainerMode ON sets width/height for docker_host', () => {
     const host: Node<NodeData> = { id: 'dh', type: 'docker_host', position: { x: 0, y: 0 }, data: { label: 'dh', type: 'docker_host', status: 'unknown', services: [], container_mode: false } }
     useCanvasStore.setState({ nodes: [host] })
-    useCanvasStore.getState().setProxmoxContainerMode('dh', true)
+    useCanvasStore.getState().setContainerMode('dh', true)
     const updated = useCanvasStore.getState().nodes.find((n) => n.id === 'dh')
     expect(updated?.data.container_mode).toBe(true)
     expect(updated?.width).toBe(300)
     expect(updated?.height).toBe(200)
   })
 
-  it('setProxmoxContainerMode OFF clears width/height for docker_host', () => {
+  it('setContainerMode OFF clears width/height for docker_host', () => {
     const host: Node<NodeData> = { id: 'dh', type: 'docker_host', position: { x: 0, y: 0 }, width: 300, height: 200, data: { label: 'dh', type: 'docker_host', status: 'unknown', services: [], container_mode: true } }
     useCanvasStore.setState({ nodes: [host] })
-    useCanvasStore.getState().setProxmoxContainerMode('dh', false)
+    useCanvasStore.getState().setContainerMode('dh', false)
     const updated = useCanvasStore.getState().nodes.find((n) => n.id === 'dh')
     expect(updated?.data.container_mode).toBe(false)
     expect(updated?.width).toBeUndefined()
     expect(updated?.height).toBeUndefined()
   })
 
-  it('setProxmoxContainerMode OFF detaches children', () => {
+  it('setContainerMode OFF promotes children', () => {
     const proxmox: Node<NodeData> = { id: 'px', type: 'proxmox', position: { x: 0, y: 0 }, data: { label: 'px', type: 'proxmox', status: 'unknown', services: [], container_mode: true }, parentId: undefined }
     const child: Node<NodeData> = { id: 'vm1', type: 'vm', position: { x: 0, y: 0 }, data: { label: 'vm1', type: 'vm', status: 'unknown', services: [], parent_id: 'px' }, parentId: 'px', extent: 'parent' }
     useCanvasStore.setState({ nodes: [proxmox, child] })
-    useCanvasStore.getState().setProxmoxContainerMode('px', false)
+    useCanvasStore.getState().setContainerMode('px', false)
     const { nodes } = useCanvasStore.getState()
     const updatedChild = nodes.find((n) => n.id === 'vm1')
     expect(nodes.find((n) => n.id === 'px')?.data.container_mode).toBe(false)
@@ -211,16 +211,16 @@ describe('canvasStore — containers & nesting', () => {
   })
 
   // Regression: editing any field on a container host (e.g. its icon) used to
-  // re-fire setProxmoxContainerMode(true) because the modal always re-sends
+  // re-fire setContainerMode(true) because the modal always re-sends
   // container_mode. Re-running the ON transition re-applied the
   // absolute->relative conversion to children that were ALREADY relative,
   // collapsing them into a corner. A redundant ON call must now be a no-op for
   // already-nested children.
-  it('setProxmoxContainerMode ON is idempotent for already-nested children', () => {
+  it('setContainerMode ON is idempotent for already-nested children', () => {
     const proxmox: Node<NodeData> = { id: 'px', type: 'proxmox', position: { x: 500, y: -300 }, width: 852, height: 212, data: { label: 'px', type: 'proxmox', status: 'unknown', services: [], container_mode: true } }
     const child: Node<NodeData> = { id: 'vm1', type: 'vm', position: { x: 10, y: 62 }, data: { label: 'vm1', type: 'vm', status: 'unknown', services: [], parent_id: 'px' }, parentId: 'px', extent: 'parent' }
     useCanvasStore.setState({ nodes: [proxmox, child] })
-    useCanvasStore.getState().setProxmoxContainerMode('px', true)
+    useCanvasStore.getState().setContainerMode('px', true)
     const c = useCanvasStore.getState().nodes.find((n) => n.id === 'vm1')
     expect(c?.position).toEqual({ x: 10, y: 62 })
     expect(c?.parentId).toBe('px')
@@ -278,5 +278,97 @@ describe('canvasStore — containers & nesting', () => {
     expect(added.data.parent_id).toBeUndefined()
     expect(added.parentId).toBeUndefined()
     expect(added.position).toEqual({ x: 30, y: 30 })
+  })
+
+  it('enables container mode on an arbitrary inventory device type', () => {
+    useCanvasStore.setState({ nodes: [makeNode('generic', { type: 'generic' })] })
+    useCanvasStore.getState().setContainerMode('generic', true)
+    const node = useCanvasStore.getState().nodes[0]
+    expect(node.data.container_mode).toBe(true)
+    expect(node.width).toBe(300)
+    expect(node.height).toBe(200)
+  })
+
+  it('promotes direct children one level when a nested container is disabled', () => {
+    const outer = {
+      ...makeNode('outer', { container_mode: true }),
+      position: { x: 100, y: 100 },
+    }
+    const inner: Node<NodeData> = {
+      ...makeNode('inner', { container_mode: true, parent_id: 'outer' }),
+      parentId: 'outer',
+      extent: 'parent',
+      position: { x: 20, y: 20 },
+    }
+    const child: Node<NodeData> = {
+      ...makeNode('child', { parent_id: 'inner' }),
+      parentId: 'inner',
+      extent: 'parent',
+      position: { x: 10, y: 15 },
+    }
+    useCanvasStore.setState({ nodes: [outer, inner, child] })
+
+    useCanvasStore.getState().setContainerMode('inner', false)
+
+    const promoted = useCanvasStore.getState().nodes.find((node) => node.id === 'child')!
+    expect(promoted.parentId).toBe('outer')
+    expect(promoted.data.parent_id).toBe('outer')
+    expect(promoted.position).toEqual({ x: 30, y: 35 })
+  })
+
+  it('rejects a multi-node cycle assigned through updateNode', () => {
+    const outer = makeNode('outer', { container_mode: true })
+    const inner: Node<NodeData> = {
+      ...makeNode('inner', { container_mode: true, parent_id: 'outer' }),
+      parentId: 'outer',
+      extent: 'parent',
+    }
+    useCanvasStore.setState({ nodes: [outer, inner] })
+    useCanvasStore.getState().updateNode('outer', { parent_id: 'inner', label: 'renamed' })
+    const updated = useCanvasStore.getState().nodes.find((node) => node.id === 'outer')!
+    expect(updated.data.parent_id).toBeUndefined()
+    expect(updated.data.label).toBe('renamed')
+  })
+
+  it('nests a zone in a device container and grows the target to fit it', () => {
+    const container = {
+      ...makeNode('container', { type: 'router', container_mode: true }),
+      position: { x: 100, y: 100 },
+      width: 300,
+      height: 200,
+    }
+    const zone: Node<NodeData> = {
+      ...makeNode('zone', { type: 'groupRect' }),
+      position: { x: 360, y: 260 },
+      width: 240,
+      height: 180,
+    }
+    useCanvasStore.setState({ nodes: [container, zone] })
+    useCanvasStore.getState().addNodesToContainer('container', ['zone'])
+    const after = useCanvasStore.getState().nodes
+    expect(after.find((node) => node.id === 'zone')?.parentId).toBe('container')
+    expect(after.find((node) => node.id === 'zone')?.extent).toBe('parent')
+    expect(after.find((node) => node.id === 'container')?.width).toBeGreaterThan(300)
+    expect(after.find((node) => node.id === 'container')?.height).toBeGreaterThan(200)
+  })
+
+  it('container-only deletion promotes a child and preserves its subtree', () => {
+    const parent = { ...makeNode('parent', { container_mode: true }), position: { x: 100, y: 100 } }
+    const child: Node<NodeData> = {
+      ...makeNode('child', { container_mode: true, parent_id: 'parent' }),
+      parentId: 'parent', extent: 'parent', position: { x: 20, y: 20 },
+    }
+    const grandchild: Node<NodeData> = {
+      ...makeNode('grandchild', { parent_id: 'child' }),
+      parentId: 'child', extent: 'parent', position: { x: 5, y: 5 },
+    }
+    useCanvasStore.setState({ nodes: [parent, child, grandchild] })
+    useCanvasStore.getState().deleteNodes(['parent'], 'release')
+    const after = useCanvasStore.getState().nodes
+    expect(after.map((node) => node.id)).toEqual(['child', 'grandchild'])
+    expect(after[0].parentId).toBeUndefined()
+    expect(after[0].position).toEqual({ x: 120, y: 120 })
+    expect(after[1].parentId).toBe('child')
+    expect(after[1].position).toEqual({ x: 5, y: 5 })
   })
 })

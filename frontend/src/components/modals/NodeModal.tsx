@@ -76,7 +76,6 @@ function CPStepper({ label, side, value, onChange }: {
 }
 
 const CHECK_METHODS: CheckMethod[] = ['none', 'ping', 'http', 'https', 'tcp', 'ssh', 'prometheus', 'health']
-const CONTAINER_MODE_TYPES: NodeType[] = ['proxmox', 'vm', 'lxc', 'docker_host']
 const ZIGBEE_TYPES: NodeType[] = ['zigbee_coordinator', 'zigbee_router', 'zigbee_enddevice']
 const ZWAVE_TYPES: NodeType[] = ['zwave_coordinator', 'zwave_router', 'zwave_enddevice']
 // Mesh radio devices aren't IP-reachable, so they default to no status check.
@@ -124,11 +123,12 @@ interface NodeModalProps {
   currentNodeId?: string
   /** Shortcut: open the Custom Style editor for this node's type (canvas-wide). */
   onEditTypeStyle?: (type: NodeType) => void
+  onDelete?: () => void
 }
 
 // NodeModal is always mounted with a key that changes on open/edit, so useState
 // initial value is enough - no need for a reset effect.
-export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node', parentCandidates = [], currentNodeId, onEditTypeStyle }: NodeModalProps) {
+export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node', parentCandidates = [], currentNodeId, onEditTypeStyle, onDelete }: NodeModalProps) {
   const merged = { ...DEFAULT_DATA, ...initial }
   if (MESH_TYPES.includes((merged.type ?? '') as NodeType)) merged.check_method = 'none'
   const [form, setForm] = useState<Partial<NodeData>>(merged)
@@ -166,7 +166,7 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
     }
     setLabelError(false)
     const selectedType = (form.type ?? 'generic') as NodeType
-    const canUseContainerMode = CONTAINER_MODE_TYPES.includes(selectedType)
+    const canUseContainerMode = !isFurnitureType(selectedType)
     let safeParentId = form.parent_id
     if (safeParentId) {
       const parent = parentCandidates.find((n) => n.id === safeParentId)
@@ -400,7 +400,7 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
             })()}
 
             {/* Container mode */}
-            {CONTAINER_MODE_TYPES.includes((form.type ?? 'generic') as NodeType) && (
+            {!isFurniture && (
               <div className="flex items-center justify-between col-span-2 py-1">
                 <div className="flex flex-col gap-0.5">
                   <Label className="text-xs text-muted-foreground">Container Mode</Label>
@@ -606,12 +606,7 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
                 variant="ghost"
                 size="sm"
                 className="text-[#f85149] hover:text-[#f85149] hover:bg-[#f85149]/10 cursor-pointer"
-                onClick={() => {
-                  if (window.confirm('Delete this node?')) {
-                    onSubmit({ ...form, _delete: true })
-                    onClose()
-                  }
-                }}
+                onClick={() => { onDelete?.(); onClose() }}
                 style={{ minWidth: 64 }}
               >
                 Delete

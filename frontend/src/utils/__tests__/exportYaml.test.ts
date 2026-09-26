@@ -144,14 +144,17 @@ describe('exportCanvasToYaml', () => {
     expect(entryB).not.toHaveProperty('links')
   })
 
-  it('excludes groupRect nodes from output', () => {
+  it('exports groupRect nodes so nested zone hierarchies can round-trip', () => {
     const nodes = [
       makeNode({ label: 'Zone', type: 'groupRect' }, '1'),
       makeNode({ label: 'Server', type: 'server' }, '2'),
     ]
     const result = yaml.load(exportCanvasToYaml(nodes, [])) as object[]
-    expect(result).toHaveLength(1)
-    expect((result[0] as Record<string, unknown>).label).toBe('Server')
+    expect(result).toHaveLength(2)
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Zone', nodeType: 'groupRect' }),
+      expect.objectContaining({ label: 'Server', nodeType: 'server' }),
+    ]))
   })
 
   it('roundtrip: all non-empty fields appear in YAML output', () => {
@@ -215,5 +218,15 @@ describe('exportCanvasToYaml', () => {
 
     const off = (yaml.load(exportCanvasToYaml([makeNode({ label: 'Off', type: 'server', show_port_numbers: false })], [])) as Record<string, unknown>[])[0]
     expect(off).not.toHaveProperty('showPortNumbers')
+  })
+
+  it('exports arbitrary container mode and its dimensions', () => {
+    const node = {
+      ...makeNode({ label: 'Router container', type: 'router', container_mode: true }),
+      width: 420,
+      height: 260,
+    }
+    const entry = (yaml.load(exportCanvasToYaml([node], [])) as Record<string, unknown>[])[0]
+    expect(entry).toMatchObject({ containerMode: true, width: 420, height: 260 })
   })
 })

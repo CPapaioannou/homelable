@@ -4,10 +4,18 @@ import {
   HardDrive, Cpu, Wifi, Circle, Cctv, Printer, Monitor, MonitorCog, Laptop, Smartphone, PlugZap, Anchor, Package, Flame, Radio, Antenna, RadioTower, Share2,
   Grid3x3, Battery, Fuel, Sun, Repeat2, Split, ToggleLeft, Lightbulb, Gauge, Combine, Cable, Zap,
 } from 'lucide-react'
-import { BaseNode } from './BaseNode'
+import { BaseNode as BaseCardNode } from './BaseNode'
+import { ContainerNode } from './ProxmoxGroupNode'
 import type { NodeData } from '@/types'
+import type { LucideIcon } from 'lucide-react'
 
 type N = NodeProps<Node<NodeData>>
+
+function BaseNode(props: N & { icon: LucideIcon }) {
+  return props.data.container_mode === true
+    ? <ContainerNode {...props} />
+    : <BaseCardNode {...props} />
+}
 
 export const IspNode     = (props: N) => <BaseNode {...props} icon={Globe} />
 export const RouterNode  = (props: N) => <BaseNode {...props} icon={Router} />

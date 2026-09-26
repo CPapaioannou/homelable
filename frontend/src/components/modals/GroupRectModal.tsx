@@ -28,6 +28,12 @@ export interface GroupRectFormData {
   border_width: number
   background_color: string
   z_order: number
+  parent_id?: string
+}
+
+interface ParentCandidate {
+  id: string
+  label: string
 }
 
 const BORDER_STYLES: { value: BorderStyle; label: string; preview: string }[] = [
@@ -112,6 +118,8 @@ interface GroupRectModalProps {
    * Import button, which would otherwise look like it did nothing.
    */
   importOnSubmit?: boolean
+  parentCandidates?: ParentCandidate[]
+  currentNodeId?: string
 }
 
 export function GroupRectModal({
@@ -124,6 +132,8 @@ export function GroupRectModal({
   onImportSubnet,
   countSubnetMatches,
   importOnSubmit = false,
+  parentCandidates = [],
+  currentNodeId,
 }: GroupRectModalProps) {
   const [form, setForm] = useState<GroupRectFormData>({ ...DEFAULT_FORM, ...initial })
   const [subnet, setSubnet] = useState('')
@@ -193,6 +203,41 @@ export function GroupRectModal({
               className={`bg-[#21262d] border border-[#30363d] text-sm resize-y px-2 py-1.5 text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-[#00d4ff]/50 ${modalStyles['modal-radius']}`}
             />
           </div>
+
+          {parentCandidates.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs text-muted-foreground">Parent container</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={form.parent_id ?? 'none'}
+                  onValueChange={(value: string | null) => set('parent_id', value && value !== 'none' ? value : undefined)}
+                >
+                  <SelectTrigger className={`bg-[#21262d] border-[#30363d] text-sm h-8 cursor-pointer ${modalStyles['modal-interactive']}`} aria-label="Zone parent selector">
+                    <SelectValue>
+                      {form.parent_id
+                        ? parentCandidates.find((candidate) => candidate.id === form.parent_id)?.label ?? 'None'
+                        : 'None'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#21262d] border-[#30363d]">
+                    <SelectItem value="none" className="text-sm">None</SelectItem>
+                    {parentCandidates
+                      .filter((candidate) => candidate.id !== currentNodeId)
+                      .map((candidate) => (
+                        <SelectItem key={candidate.id} value={candidate.id} className="text-sm">
+                          {candidate.label}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                {form.parent_id && (
+                  <Button type="button" variant="outline" size="sm" onClick={() => set('parent_id', undefined)}>
+                    Remove from parent
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Font */}
           <div className="flex flex-col gap-1.5">

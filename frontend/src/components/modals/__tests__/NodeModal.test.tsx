@@ -83,26 +83,15 @@ describe('NodeModal', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
-  // ── Delete confirm ────────────────────────────────────────────────────
+  // ── Centralized deletion ─────────────────────────────────────────────
 
-  it('deletes and closes when Delete confirm is accepted', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const { onClose, onSubmit } = renderModal({ title: 'Edit Node', initial: BASE })
+  it('requests deletion through the shared path and closes', () => {
+    const onDelete = vi.fn()
+    const { onClose, onSubmit } = renderModal({ title: 'Edit Node', initial: BASE, onDelete })
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ _delete: true }))
-    expect(onClose).toHaveBeenCalledOnce()
-    confirmSpy.mockRestore()
-  })
-
-  // Regression: bare-if without braces used to call onClose() unconditionally,
-  // closing the modal even when the user cancelled the confirm dialog.
-  it('does not delete or close when Delete confirm is cancelled', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const { onClose, onSubmit } = renderModal({ title: 'Edit Node', initial: BASE })
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(onDelete).toHaveBeenCalledOnce()
     expect(onSubmit).not.toHaveBeenCalled()
-    expect(onClose).not.toHaveBeenCalled()
-    confirmSpy.mockRestore()
+    expect(onClose).toHaveBeenCalledOnce()
   })
 
   // ── Custom-style shortcut ─────────────────────────────────────────────
@@ -287,15 +276,15 @@ describe('NodeModal', () => {
 
   // ── Container mode ─────────────────────────────────────────────────────
 
-  const containerModeTypes = ['proxmox', 'vm', 'lxc', 'docker_host'] as const
-  const nonContainerModeTypes = ['isp', 'router', 'switch', 'server', 'nas', 'kvm', 'ap', 'printer', 'iot', 'camera', 'cpl', 'computer', 'generic', 'docker_container', 'groupRect', 'group'] as const
+  const containerModeTypes = ['proxmox', 'vm', 'lxc', 'docker_host', 'isp', 'router', 'switch', 'server', 'nas', 'kvm', 'ap', 'printer', 'iot', 'camera', 'cpl', 'computer', 'generic', 'docker_container'] as const
+  const furnitureTypes = ['groupRect', 'group', 'text'] as const
 
   it.each(containerModeTypes)('shows Container Mode toggle for %s type', (type) => {
     renderModal({ initial: { ...BASE, type } })
     expect(screen.getByText('Container Mode')).toBeDefined()
   })
 
-  it.each(nonContainerModeTypes)('hides Container Mode for %s type', (type) => {
+  it.each(furnitureTypes)('hides Container Mode for %s furniture type', (type) => {
     renderModal({ initial: { ...BASE, type } })
     expect(screen.queryByText('Container Mode')).toBeNull()
   })

@@ -40,6 +40,7 @@ import { DeviceInventoryModal } from '@/components/modals/DeviceInventoryModal'
 import { ScanHistoryModal } from '@/components/modals/ScanHistoryModal'
 import { ShortcutsModal } from '@/components/modals/ShortcutsModal'
 import { ConfirmAddToGroupModal } from '@/components/modals/ConfirmAddToGroupModal'
+import { DeleteContainerModal } from '@/components/modals/DeleteContainerModal'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { readAutosaveSettings, subscribeAutosaveSettings, type AutosaveSettings } from '@/utils/autosaveSettings'
 import { useAutosave } from '@/hooks/useAutosave'
@@ -72,11 +73,12 @@ import type { ZwaveNode, ZwaveEdge } from '@/components/zwave/types'
 import type { ProxmoxNode, ProxmoxEdge, ProxmoxCanvasMode } from '@/components/proxmox/types'
 import { buildProxmoxClusterEdges } from '@/components/proxmox/clusterEdges'
 import { groupProxmoxGuests, layoutProxmoxContainers, measureProxmoxContainers } from '@/utils/proxmoxContainerLayout'
+import { absolutePosition, descendantIds, nodeMap, repairHierarchy, visualDescendantIds } from '@/utils/nodeHierarchy'
 
 const STANDALONE = import.meta.env.VITE_STANDALONE === 'true'
 
 export default function App() {
-  const { loadCanvas, applyLayout, markSaved, markUnsaved, hasUnsavedChanges, editSeq, selectedNodeId, selectedNodeIds, addNode, updateNode, deleteNode, onConnect, updateEdge, deleteEdge, setProxmoxContainerMode, setNodeZIndex, editingGroupRectId, setEditingGroupRectId, editingTextId, setEditingTextId, nodes, edges, snapshotHistory, undo, redo, addNodesToGroup, addNodesToContainer, addNodesToZone, importZoneSubnet, floorMap, setFloorMap } = useCanvasStore()
+  const { loadCanvas, applyLayout, markSaved, markUnsaved, hasUnsavedChanges, editSeq, selectedNodeId, selectedNodeIds, addNode, updateNode, deleteNodes, onConnect, updateEdge, deleteEdge, setContainerMode, setNodeZIndex, editingGroupRectId, setEditingGroupRectId, editingTextId, setEditingTextId, nodes, edges, snapshotHistory, undo, redo, addNodesToGroup, addNodesToContainer, addNodesToZone, importZoneSubnet, floorMap, setFloorMap } = useCanvasStore()
   const canvasRef = useRef<HTMLDivElement>(null)
   const { isAuthenticated, isInitialized } = useAuthStore()
   const authBootstrapStarted = useRef(false)
@@ -149,6 +151,11 @@ export default function App() {
   const [pendingGroupAdd, setPendingGroupAdd] = useState<{ nodeIds: string[]; groupId: string } | null>(null)
   const [pendingContainerAdd, setPendingContainerAdd] = useState<{ nodeIds: string[]; containerId: string } | null>(null)
   const [pendingZoneAdd, setPendingZoneAdd] = useState<{ nodeIds: string[]; zoneId: string } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{
+    nodeIds: string[]
+    label: string
+    descendantCount: number
+  } | null>(null)
   // Labels for the add-to-group/container/zone confirmation, in the order dropped.
   const labelsOf = useCallback(
     (ids: string[]) => ids.map((id) => nodes.find((n) => n.id === id)?.data.label ?? ''),
@@ -163,6 +170,33 @@ export default function App() {
   const [proxmoxImportOpen, setProxmoxImportOpen] = useState(false)
   const [unifiImportOpen, setUnifiImportOpen] = useState(false)
   const [importPickerOpen, setImportPickerOpen] = useState(false)
+
+  const requestDeleteNodes = useCallback((nodeIds: string[]) => {
+    const selected = new Set(nodeIds)
+    const affected = new Set<string>()
+    const promptingContainers = nodes.filter((node) =>
+      selected.has(node.id) && node.data.container_mode === true,
+    )
+    for (const container of promptingContainers) {
+      for (const id of visualDescendantIds(nodes, container.id)) {
+        if (!selected.has(id)) affected.add(id)
+      }
+    }
+    if (affected.size > 0) {
+      setPendingDelete({
+        nodeIds,
+        label: promptingContainers.map((node) => node.data.label).join(', '),
+        descendantCount: affected.size,
+      })
+      return
+    }
+
+    const cascade = nodes.some((node) => selected.has(node.id) && (
+      node.data.type === 'group'
+      || (node.data.container_mode === true && visualDescendantIds(nodes, node.id).size > 0)
+    ))
+    deleteNodes(nodeIds, cascade ? 'cascade' : 'release')
+  }, [deleteNodes, nodes])
 
   // Declare handleSave before the Ctrl+S effect so it is in scope.
   // Returns true on success, false on failure — the design-switch effect relies
@@ -242,7 +276,7 @@ export default function App() {
     const { nodes: apiNodes, edges: apiEdges } = res.data
     const mode = decideCanvasLoad(apiNodes.length > 0, res.data.initialized === true)
     if (mode === 'real') {
-      const { nodes: rfNodes, edges: rfEdges } = deserializeApiCanvas(
+      const { nodes: rfNodes, edges: rfEdges, repairs } = deserializeApiCanvas(
         apiNodes as ApiNode[],
         apiEdges as ApiEdge[],
       )
@@ -254,6 +288,10 @@ export default function App() {
       // across canvases when switching designs.
       setFloorMap(savedFloorMap ?? null)
       loadCanvas(rfNodes, rfEdges)
+      if (repairs.length > 0) {
+        markUnsaved()
+        toast.warning(`Repaired ${repairs.length} invalid canvas relationship${repairs.length === 1 ? '' : 's'}`)
+      }
     } else if (mode === 'empty') {
       // Initialized but no nodes: the user cleared this canvas on purpose — respect
       // it and keep it empty instead of re-seeding the demo.
@@ -287,7 +325,11 @@ export default function App() {
       // Floor plans are backend-only; keep the store clear in standalone mode.
       setFloorMap(null)
       const migrated = migrateClusterHandles(saved.nodes, saved.edges)
+      const repairs = repairHierarchy(migrated.nodes).repairs
       loadCanvas(migrated.nodes, migrated.edges)
+      if (repairs.length > 0) {
+        toast.warning(`Repaired ${repairs.length} invalid canvas relationship${repairs.length === 1 ? '' : 's'}`)
+      }
     } else if (mode === 'empty' && saved) {
       if (saved.theme_id) setTheme(saved.theme_id)
       if (saved.custom_style) setCustomStyle(saved.custom_style)
@@ -301,7 +343,7 @@ export default function App() {
     setIsNewUser(isNewUserCanvas(mode))
     // Record provenance so autosave writes back under the design just loaded.
     setLoadedDesignId(designId)
-  }, [loadCanvas, setTheme, setCustomStyle, setFloorMap])
+  }, [loadCanvas, markUnsaved, setTheme, setCustomStyle, setFloorMap])
 
   /**
    * Load whichever canvas the design holds. Rack designs bypass the node/edge
@@ -576,12 +618,15 @@ export default function App() {
     // bounding box with no way to drag it out (issue #205 follow-up).
     // A visual group nests too, so it seeds its position the same way — mirrors
     // the condition in the store's addNode, which is the authority here.
-    const nestInParent = !!parentNode?.data.container_mode || parentNode?.data.type === 'group'
+    const nestInParent = !!parentNode?.data.container_mode || parentNode?.data.type === 'group' || parentNode?.data.type === 'groupRect'
     // Seed an ABSOLUTE position near the container's top-left; addNode converts
     // it to container-relative. addNode is the single authority for parentId /
     // extent, so we don't set them here.
     const position = nestInParent && parentNode
-      ? { x: parentNode.position.x + 20, y: parentNode.position.y + 50 }
+      ? (() => {
+          const parentAbsolute = absolutePosition(parentNode, nodeMap(nodes))
+          return { x: parentAbsolute.x + 20, y: parentAbsolute.y + 50 }
+        })()
       : getCenteredPosition(isContainerNode ? 300 : 0, isContainerNode ? 200 : 0)
 
     const newNode: Node<NodeData> = {
@@ -625,6 +670,7 @@ export default function App() {
       data: {
         label: data.label,
         description: data.description,
+        parent_id: data.parent_id,
         type: 'groupRect',
         status: 'unknown',
         services: [],
@@ -660,6 +706,7 @@ export default function App() {
     updateNode(editingGroupRectId, {
       label: data.label,
       description: data.description,
+      parent_id: data.parent_id,
       custom_colors: {
         ...existing?.data.custom_colors,
         border: data.border_color,
@@ -734,17 +781,15 @@ export default function App() {
 
   const handleDeleteText = useCallback(() => {
     if (!editingTextId) return
-    snapshotHistory()
-    deleteNode(editingTextId)
+    requestDeleteNodes([editingTextId])
     setEditingTextId(null)
-  }, [editingTextId, deleteNode, setEditingTextId, snapshotHistory])
+  }, [editingTextId, requestDeleteNodes, setEditingTextId])
 
   const handleDeleteGroupRect = useCallback(() => {
     if (!editingGroupRectId) return
-    snapshotHistory()
-    deleteNode(editingGroupRectId)
+    requestDeleteNodes([editingGroupRectId])
     setEditingGroupRectId(null)
-  }, [editingGroupRectId, deleteNode, setEditingGroupRectId, snapshotHistory])
+  }, [editingGroupRectId, requestDeleteNodes, setEditingGroupRectId])
 
   const handleEditNode = useCallback((id: string) => {
     setEditNodeId(id)
@@ -762,7 +807,7 @@ export default function App() {
     // up in a corner). Gate on a real toggle instead.
     const prevContainerMode = !!existingNode?.data.container_mode
     if (typeof data.container_mode === 'boolean' && data.container_mode !== prevContainerMode) {
-      setProxmoxContainerMode(editNodeId, data.container_mode)
+      setContainerMode(editNodeId, data.container_mode)
     }
     // Sync virtual edge when parent_id changes on an LXC/VM node
     const nodeType = data.type ?? existingNode?.data.type
@@ -790,7 +835,7 @@ export default function App() {
       }
     }
     setEditNodeId(null)
-  }, [editNodeId, updateNode, setProxmoxContainerMode, nodes, edges, deleteEdge, onConnect, snapshotHistory])
+  }, [editNodeId, updateNode, setContainerMode, nodes, edges, deleteEdge, onConnect, snapshotHistory])
 
   const handleAutoLayout = useCallback((mode: AutoLayoutMode) => {
     if (mode === 'hierarchy') {
@@ -1220,6 +1265,7 @@ export default function App() {
                     onRequestAddToGroup={setPendingGroupAdd}
                     onRequestAddToContainer={setPendingContainerAdd}
                     onRequestAddToZone={setPendingZoneAdd}
+                    onRequestDeleteNodes={requestDeleteNodes}
                     onOpenInventory={(deviceId) => openInventoryModal(deviceId)}
                   />
                 )}
@@ -1285,6 +1331,7 @@ export default function App() {
               .map((n) => ({ id: n.id, label: n.data.label ?? n.id, type: n.data.type, container_mode: n.data.container_mode }))
           })()}
           currentNodeId={editNodeId ?? undefined}
+          onDelete={() => { if (editNodeId) requestDeleteNodes([editNodeId]) }}
           onEditTypeStyle={setStyleEditorType}
         />
 
@@ -1382,6 +1429,9 @@ export default function App() {
           onImportSubnet={(cidr) => { pendingZoneSubnet.current = cidr }}
           countSubnetMatches={(cidr) => countSubnetMatches(cidr)}
           importOnSubmit
+          parentCandidates={nodes
+            .filter((n) => n.data.type === 'groupRect' || n.data.container_mode === true)
+            .map((n) => ({ id: n.id, label: n.data.label ?? n.id }))}
           title="Add Zone"
         />
 
@@ -1394,6 +1444,12 @@ export default function App() {
           onDelete={handleDeleteGroupRect}
           onImportSubnet={(cidr) => { if (editingGroupRectId) handleImportSubnetIntoZone(editingGroupRectId, cidr) }}
           countSubnetMatches={(cidr) => countSubnetMatches(cidr, editingGroupRectId ?? undefined)}
+          currentNodeId={editingGroupRectId ?? undefined}
+          parentCandidates={nodes
+            .filter((n) => n.id !== editingGroupRectId
+              && (!editingGroupRectId || !descendantIds(nodes, editingGroupRectId).has(n.id))
+              && (n.data.type === 'groupRect' || n.data.container_mode === true))
+            .map((n) => ({ id: n.id, label: n.data.label ?? n.id }))}
           initial={(() => {
             const n = editingGroupRectId ? nodes.find((nd) => nd.id === editingGroupRectId) : null
             if (!n) return undefined
@@ -1403,6 +1459,7 @@ export default function App() {
               // `notes` is where a zone description used to try to live; read it
               // as a fallback so a canvas loaded before the fix still shows it.
               description: n.data.description ?? n.data.notes ?? '',
+              parent_id: n.data.parent_id,
               font: rc.font ?? 'inter',
               text_color: rc.text_color ?? '#e6edf3',
               text_position: rc.text_position ?? 'top-left',
@@ -1513,6 +1570,21 @@ export default function App() {
             setPendingZoneAdd(null)
           }}
           onCancel={() => setPendingZoneAdd(null)}
+        />
+
+        <DeleteContainerModal
+          open={!!pendingDelete}
+          label={pendingDelete?.label ?? ''}
+          descendantCount={pendingDelete?.descendantCount ?? 0}
+          onContainerOnly={() => {
+            if (pendingDelete) deleteNodes(pendingDelete.nodeIds, 'release')
+            setPendingDelete(null)
+          }}
+          onSubtree={() => {
+            if (pendingDelete) deleteNodes(pendingDelete.nodeIds, 'cascade')
+            setPendingDelete(null)
+          }}
+          onCancel={() => setPendingDelete(null)}
         />
 
         {/* Mounted in standalone too: status-check settings are hidden inside,

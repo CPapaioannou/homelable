@@ -287,13 +287,13 @@ describe('CanvasContainer', () => {
     expect(onRequestAddToZone).not.toHaveBeenCalled()
   })
 
-  it('does not fire onRequestAddToZone when the dragged node is a zone itself', () => {
+  it('allows a zone to be nested inside another zone', () => {
     const onRequestAddToZone = vi.fn()
     const node = zoneNode('z2')
     rf.intersecting = [zoneNode('z1')]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
     ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
-    expect(onRequestAddToZone).not.toHaveBeenCalled()
+    expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['z2'], zoneId: 'z1' })
   })
 
   it('detaches a zone child dropped outside its zone', () => {
@@ -329,13 +329,13 @@ describe('CanvasContainer', () => {
     expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1', 'n2', 'n3'], zoneId: 'z1' })
   })
 
-  it('leaves zones and groups out of a dragged selection', () => {
+  it('allows zones but leaves fixed groups out of a dragged selection', () => {
     const onRequestAddToZone = vi.fn()
     const dragged = [makeNode('n1'), zoneNode('z1'), groupNode('g1')]
     rf.intersecting = [zoneNode('z2')]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
     ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged[0], dragged)
-    expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1'], zoneId: 'z2' })
+    expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1', 'z1'], zoneId: 'z2' })
   })
 
   it('never asks to add the destination container to itself', () => {
@@ -346,6 +346,21 @@ describe('CanvasContainer', () => {
     render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
     ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged[0], dragged)
     expect(onRequestAddToContainer).toHaveBeenCalledWith({ nodeIds: ['n1'], containerId: 'px1' })
+  })
+
+  it('does not offer a dragged container descendant as its new parent', () => {
+    const onRequestAddToContainer = vi.fn()
+    const outer = containerNode('outer')
+    const inner = {
+      ...containerNode('inner'),
+      parentId: 'outer',
+      data: { ...containerNode('inner').data, parent_id: 'outer' },
+    }
+    useCanvasStore.setState({ nodes: [outer, inner] })
+    rf.intersecting = [inner]
+    render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, outer, [outer])
+    expect(onRequestAddToContainer).not.toHaveBeenCalled()
   })
 
   it('keeps an already-parented node in the selection with its own parent', () => {

@@ -5,6 +5,7 @@ import type { YamlNode, YamlNodeConnection } from '@/types/yaml'
 import { generateUUID } from '@/utils/uuid'
 import { applyDagreLayout } from '@/utils/layout'
 import { migrateClusterHandles } from '@/utils/canvasSerializer'
+import { repairHierarchy } from '@/utils/nodeHierarchy'
 
 /**
  * Hardware specs as canvas properties.
@@ -103,12 +104,15 @@ export function parseYamlToCanvas(
       ...(typeof yn.rightHandles === 'number' ? { right_handles: yn.rightHandles } : {}),
       // Restore the port-number toggle (issue #272).
       ...(yn.showPortNumbers ? { show_port_numbers: true } : {}),
+      ...(typeof yn.containerMode === 'boolean' ? { container_mode: yn.containerMode } : {}),
     }
 
     newNodes.push({
       id,
       type: yn.nodeType,
       position: { x: 0, y: 0 },
+      ...(typeof yn.width === 'number' ? { width: yn.width } : {}),
+      ...(typeof yn.height === 'number' ? { height: yn.height } : {}),
       data,
     })
 
@@ -167,7 +171,6 @@ export function parseYamlToCanvas(
         // Set React Flow parentId for nesting
         node.data = { ...node.data, parent_id: parentId }
         node.parentId = parentId
-        node.extent = 'parent'
         // Also create an edge (parent bottom → child top)
         addEdgeIfNew(parentId, node.id, yn.parent, 'bottom', 'top-t')
       }
@@ -203,6 +206,29 @@ export function parseYamlToCanvas(
     }
   }
 
+  // Older YAML encoded visual nesting only through `parent`. Preserve that
+  // behaviour by enabling container mode on device parents when the new field
+  // is absent. Zones are inherently containers and fixed groups stay fixed.
+  const importedById = new Map(newNodes.map((node) => [node.id, node]))
+  for (let i = 0; i < newNodes.length; i++) {
+    const node = newNodes[i]
+    const yn = yamlNodes[i]
+    if (!yn.parent || !node.parentId) continue
+    const parent = importedById.get(node.parentId)
+    if (!parent) continue
+    if (
+      parent.data.type !== 'groupRect'
+      && parent.data.type !== 'group'
+      && parent.data.type !== 'text'
+      && yamlNodes.find((entry) => entry.label === parent.data.label)?.containerMode === undefined
+    ) {
+      parent.data = { ...parent.data, container_mode: true }
+      parent.width ??= 300
+      parent.height ??= 200
+    }
+    node.extent = parent.data.type === 'groupRect' ? undefined : 'parent'
+  }
+
   // Merge and apply layout
   const mergedNodes = [...existingNodes, ...newNodes]
   const mergedEdges = [...existingEdges, ...newEdges]
@@ -211,6 +237,7 @@ export function parseYamlToCanvas(
   // Cluster links are imported on the legacy 'cluster-left/right' handles;
   // remap them to the per-side connection points (and give the side a point).
   const migrated = migrateClusterHandles(laidOut, mergedEdges)
+  const repaired = repairHierarchy(migrated.nodes)
 
-  return { nodes: migrated.nodes, edges: migrated.edges, imported: newNodes.length }
+  return { nodes: repaired.nodes, edges: migrated.edges, imported: newNodes.length }
 }
