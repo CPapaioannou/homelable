@@ -8,6 +8,9 @@ document that outlives the device it describes.
 import uuid
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import Node
 
 
 async def _device(client: AsyncClient, headers: dict, **body) -> dict:
@@ -220,7 +223,7 @@ async def test_a_device_document_records_its_zone_and_neighbours(client: AsyncCl
     assert "`switch-core`" in doc["body"]
 
 
-async def test_a_text_annotation_is_never_read_as_a_zone(client: AsyncClient, headers: dict):
+async def test_a_text_annotation_is_never_read_as_a_zone(client: AsyncClient, headers: dict, db_session: AsyncSession):
     """A device parented in a text annotation has no zone, not the caption (#446).
 
     The annotation's content is arbitrary user text; printed as `zone_label` it
@@ -241,7 +244,6 @@ async def test_a_text_annotation_is_never_read_as_a_zone(client: AsyncClient, he
             "design_id": design_id,
             "ip": "192.168.1.20",
             "hostname": "nas-01.lan",
-            "parent_id": annotation.json()["id"],
             "pos_x": 0,
             "pos_y": 0,
         },
@@ -251,12 +253,18 @@ async def test_a_text_annotation_is_never_read_as_a_zone(client: AsyncClient, he
     # on nothing at all.
     assert node.json()["device_id"] == device["id"], node.text
 
+    # The API now rejects a text parent, so seed the legacy row the way
+    # pre-rejection databases hold it: straight into the database.
+    row = await db_session.get(Node, node.json()["id"])
+    row.parent_id = annotation.json()["id"]
+    await db_session.flush()
+
     doc = await _create(client, headers, title="nas-01", kind="device", device_id=device["id"])
     assert "maintenance zone" not in doc["body"]
     assert "Zone **" not in doc["body"]
 
 
-async def test_a_zone_above_a_text_annotation_still_names_the_device(client: AsyncClient, headers: dict):
+async def test_a_zone_above_a_text_annotation_still_names_the_device(client: AsyncClient, headers: dict, db_session: AsyncSession):
     """Skipping the annotation means walking past it, not giving up (#446)."""
     design_id = await _design(client, headers)
     device = await _device(client, headers)
@@ -271,7 +279,6 @@ async def test_a_zone_above_a_text_annotation_still_names_the_device(client: Asy
             "type": "text",
             "label": "\u26a0 maintenance",
             "design_id": design_id,
-            "parent_id": zone.json()["id"],
             "pos_x": 0,
             "pos_y": 0,
         },
@@ -285,13 +292,22 @@ async def test_a_zone_above_a_text_annotation_still_names_the_device(client: Asy
             "design_id": design_id,
             "ip": "192.168.1.20",
             "hostname": "nas-01.lan",
-            "parent_id": annotation.json()["id"],
             "pos_x": 0,
             "pos_y": 0,
         },
         headers=headers,
     )
     assert node.json()["device_id"] == device["id"], node.text
+
+    # The API now rejects both links (a caption under a zone, and a device
+    # under a caption), so seed the legacy rows the way pre-rejection
+    # databases hold them: straight into the database.
+    zone_row = await db_session.get(Node, zone.json()["id"])
+    annotation_row = await db_session.get(Node, annotation.json()["id"])
+    node_row = await db_session.get(Node, node.json()["id"])
+    annotation_row.parent_id = zone_row.id
+    node_row.parent_id = annotation_row.id
+    await db_session.flush()
 
     doc = await _create(client, headers, title="nas-01", kind="device", device_id=device["id"])
     assert "Zone **Garage**." in doc["body"]
