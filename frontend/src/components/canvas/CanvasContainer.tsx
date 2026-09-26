@@ -27,7 +27,7 @@ import { FloorMapLayer } from './FloorMapLayer'
 import { useAlignmentGuides } from '@/hooks/useAlignmentGuides'
 import { setViewportCenterProjector } from '@/utils/viewportCenter'
 import type { NodeData, EdgeData } from '@/types'
-import { canReparent } from '@/utils/nodeHierarchy'
+import { absolutePosition, canReparent } from '@/utils/nodeHierarchy'
 
 interface CanvasContainerProps {
   onConnect?: (connection: Connection) => void
@@ -213,6 +213,21 @@ export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, o
         // within a class the deepest eligible candidate wins (ties keep the
         // earlier list order).
         const byId = new Map(hierarchyNodes.map((n) => [n.id, n]))
+        // The release point is the intent: a target only counts when its area,
+        // in absolute canvas coordinates, contains the point. A card's slight
+        // overlap with a container never triggers an offer on its own, and
+        // same-level overlaps resolve to whatever the pointer is actually on.
+        const point = event && typeof event.clientX === 'number' && typeof event.clientY === 'number'
+          ? screenToFlowPosition({ x: event.clientX, y: event.clientY })
+          : null
+        const pointIn = (n: Node<NodeData>): boolean => {
+          if (!point) return false
+          const origin = absolutePosition(n, byId)
+          const w = n.width ?? n.measured?.width ?? 200
+          const h = n.height ?? n.measured?.height ?? 80
+          return point.x >= origin.x && point.x <= origin.x + w
+            && point.y >= origin.y && point.y <= origin.y + h
+        }
         const depthOf = (node: Node<NodeData>): number => {
           let depth = 0
           const seen = new Set([node.id])
@@ -228,7 +243,7 @@ export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, o
           let best: Node<NodeData> | undefined
           let bestDepth = -1
           for (const candidate of intersecting) {
-            if (!isClass(candidate) || !eligibleFor(candidate, allowZones)) continue
+            if (!isClass(candidate) || !eligibleFor(candidate, allowZones) || !pointIn(candidate)) continue
             const depth = depthOf(candidate)
             if (depth > bestDepth) {
               best = candidate
@@ -263,7 +278,7 @@ export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, o
       }
     }
     onNodeDragStop(event, dragNode, dragNodes)
-  }, [onRequestAddToGroup, onRequestAddToContainer, onRequestAddToZone, removeNodesFromGroup, nodes, getIntersectingNodes, onNodeDragStop])
+  }, [onRequestAddToGroup, onRequestAddToContainer, onRequestAddToZone, removeNodesFromGroup, nodes, getIntersectingNodes, screenToFlowPosition, onNodeDragStop])
 
   return (
     <div ref={wrapperRef} className="w-full h-full" style={{ background: theme.colors.canvasBackground }} onMouseMove={onMouseMove}>

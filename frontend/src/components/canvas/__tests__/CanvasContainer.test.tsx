@@ -12,6 +12,7 @@ let rfProps: Record<string, unknown> = {}
 // Hoisted holder so the mock factory can read the configurable intersection set.
 const rf = vi.hoisted(() => ({
   intersecting: [] as unknown[],
+  screenToFlow: vi.fn(() => ({ x: 0, y: 0 })),
   viewport: { x: 0, y: 0, zoom: 1 },
   fitView: vi.fn(() => Promise.resolve(true)),
 }))
@@ -31,7 +32,7 @@ vi.mock('@xyflow/react', () => ({
   useReactFlow: () => ({
     fitView: rf.fitView,
     getViewport: () => rf.viewport,
-    screenToFlowPosition: vi.fn(),
+    screenToFlowPosition: (p: unknown) => rf.screenToFlow(p),
     getIntersectingNodes: () => rf.intersecting,
     setNodes: vi.fn(),
     getNodes: () => [],
@@ -57,6 +58,7 @@ describe('CanvasContainer', () => {
   beforeEach(() => {
     rfProps = {}
     rf.intersecting = []
+    rf.screenToFlow = vi.fn(() => ({ x: 0, y: 0 }))
     rf.viewport = { x: 0, y: 0, zoom: 1 }
     rf.fitView.mockClear()
     useCanvasStore.setState({
@@ -94,7 +96,7 @@ describe('CanvasContainer', () => {
     const node = makeNode('n1')
     useCanvasStore.setState({ nodes: [node] })
     render(<CanvasContainer />)
-    ;(rfProps.onNodeClick as (...args: unknown[]) => unknown)({} as MouseEvent, node)
+    ;(rfProps.onNodeClick as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node)
     expect(useCanvasStore.getState().selectedNodeId).toBe('n1')
   })
 
@@ -113,7 +115,7 @@ describe('CanvasContainer', () => {
     const onEdgeDoubleClick = vi.fn()
     const edge = makeEdge('e1')
     render(<CanvasContainer onEdgeDoubleClick={onEdgeDoubleClick} />)
-    ;(rfProps.onEdgeDoubleClick as (...args: unknown[]) => unknown)({} as MouseEvent, edge)
+    ;(rfProps.onEdgeDoubleClick as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, edge)
     expect(onEdgeDoubleClick).toHaveBeenCalledWith(edge)
   })
 
@@ -121,7 +123,7 @@ describe('CanvasContainer', () => {
     const edge = makeEdge('e1')
     render(<CanvasContainer />)
     expect(() => {
-      ;(rfProps.onEdgeDoubleClick as (...args: unknown[]) => unknown)({} as MouseEvent, edge)
+      ;(rfProps.onEdgeDoubleClick as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, edge)
     }).not.toThrow()
   })
 
@@ -131,7 +133,7 @@ describe('CanvasContainer', () => {
     const onNodeDoubleClick = vi.fn()
     const node = makeNode('n1')
     render(<CanvasContainer onNodeDoubleClick={onNodeDoubleClick} />)
-    ;(rfProps.onNodeDoubleClick as (...args: unknown[]) => unknown)({} as MouseEvent, node)
+    ;(rfProps.onNodeDoubleClick as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node)
     expect(onNodeDoubleClick).toHaveBeenCalledWith(node)
   })
 
@@ -139,7 +141,7 @@ describe('CanvasContainer', () => {
     const node = makeNode('n1')
     render(<CanvasContainer />)
     expect(() => {
-      ;(rfProps.onNodeDoubleClick as (...args: unknown[]) => unknown)({} as MouseEvent, node)
+      ;(rfProps.onNodeDoubleClick as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node)
     }).not.toThrow()
   })
 
@@ -186,7 +188,7 @@ describe('CanvasContainer', () => {
     const group = groupNode('g1')
     rf.intersecting = [group]
     render(<CanvasContainer onRequestAddToGroup={onRequestAddToGroup} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToGroup).toHaveBeenCalledWith({ nodeIds: ['n1'], groupId: 'g1' })
   })
 
@@ -195,7 +197,7 @@ describe('CanvasContainer', () => {
     const node = makeNode('n1')
     rf.intersecting = [makeNode('n2')]
     render(<CanvasContainer onRequestAddToGroup={onRequestAddToGroup} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToGroup).not.toHaveBeenCalled()
   })
 
@@ -204,7 +206,7 @@ describe('CanvasContainer', () => {
     const node = { ...makeNode('n1'), parentId: 'gOther' }
     rf.intersecting = [groupNode('g1')]
     render(<CanvasContainer onRequestAddToGroup={onRequestAddToGroup} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToGroup).not.toHaveBeenCalled()
   })
 
@@ -213,7 +215,7 @@ describe('CanvasContainer', () => {
     const node = groupNode('g2')
     rf.intersecting = [groupNode('g1')]
     render(<CanvasContainer onRequestAddToGroup={onRequestAddToGroup} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToGroup).not.toHaveBeenCalled()
   })
 
@@ -228,7 +230,7 @@ describe('CanvasContainer', () => {
     const node = makeNode('n1')
     rf.intersecting = [containerNode('px1')]
     render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToContainer).toHaveBeenCalledWith({ nodeIds: ['n1'], containerId: 'px1' })
   })
 
@@ -238,7 +240,7 @@ describe('CanvasContainer', () => {
     const node = makeNode('n1')
     rf.intersecting = [containerNode('px1'), groupNode('g1')]
     render(<CanvasContainer onRequestAddToGroup={onRequestAddToGroup} onRequestAddToContainer={onRequestAddToContainer} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToGroup).toHaveBeenCalledWith({ nodeIds: ['n1'], groupId: 'g1' })
     expect(onRequestAddToContainer).not.toHaveBeenCalled()
   })
@@ -248,7 +250,7 @@ describe('CanvasContainer', () => {
     const node = { ...makeNode('n1'), parentId: 'pxOther' }
     rf.intersecting = [containerNode('px1')]
     render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToContainer).not.toHaveBeenCalled()
   })
 
@@ -257,7 +259,7 @@ describe('CanvasContainer', () => {
     const node = makeNode('n1')
     rf.intersecting = [makeNode('n2')]
     render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToContainer).not.toHaveBeenCalled()
   })
 
@@ -272,7 +274,7 @@ describe('CanvasContainer', () => {
     const node = makeNode('n1')
     rf.intersecting = [zoneNode('z1')]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1'], zoneId: 'z1' })
   })
 
@@ -282,7 +284,7 @@ describe('CanvasContainer', () => {
     const node = makeNode('n1')
     rf.intersecting = [zoneNode('z1'), containerNode('px1')]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} onRequestAddToContainer={onRequestAddToContainer} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToContainer).toHaveBeenCalledWith({ nodeIds: ['n1'], containerId: 'px1' })
     expect(onRequestAddToZone).not.toHaveBeenCalled()
   })
@@ -292,7 +294,7 @@ describe('CanvasContainer', () => {
     const node = zoneNode('z2')
     rf.intersecting = [zoneNode('z1')]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, node, [node])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, node, [node])
     expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['z2'], zoneId: 'z1' })
   })
 
@@ -302,7 +304,7 @@ describe('CanvasContainer', () => {
     useCanvasStore.setState({ nodes: [zone, child] })
     rf.intersecting = []
     render(<CanvasContainer />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, child, [child])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, child, [child])
     const after = useCanvasStore.getState().nodes.find((n) => n.id === 'n1')!
     expect(after.parentId).toBeUndefined()
     expect(after.position).toEqual({ x: 120, y: 120 })
@@ -314,7 +316,7 @@ describe('CanvasContainer', () => {
     useCanvasStore.setState({ nodes: [zone, child] })
     rf.intersecting = [zone]
     render(<CanvasContainer />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, child, [child])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, child, [child])
     expect(useCanvasStore.getState().nodes.find((n) => n.id === 'n1')?.parentId).toBe('z1')
   })
 
@@ -325,7 +327,7 @@ describe('CanvasContainer', () => {
     const dragged = [makeNode('n1'), makeNode('n2'), makeNode('n3')]
     rf.intersecting = [zoneNode('z1')]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged[0], dragged)
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, dragged[0], dragged)
     expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1', 'n2', 'n3'], zoneId: 'z1' })
   })
 
@@ -334,7 +336,7 @@ describe('CanvasContainer', () => {
     const dragged = [makeNode('n1'), zoneNode('z1'), groupNode('g1')]
     rf.intersecting = [zoneNode('z2')]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged[0], dragged)
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, dragged[0], dragged)
     expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1', 'z1'], zoneId: 'z2' })
   })
 
@@ -344,7 +346,7 @@ describe('CanvasContainer', () => {
     const dragged = [makeNode('n1'), target]
     rf.intersecting = [target]
     render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged[0], dragged)
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, dragged[0], dragged)
     expect(onRequestAddToContainer).toHaveBeenCalledWith({ nodeIds: ['n1'], containerId: 'px1' })
   })
 
@@ -359,7 +361,19 @@ describe('CanvasContainer', () => {
     useCanvasStore.setState({ nodes: [outer, inner] })
     rf.intersecting = [inner]
     render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, outer, [outer])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, outer, [outer])
+    expect(onRequestAddToContainer).not.toHaveBeenCalled()
+  })
+
+  it('does not offer a target when the release point is outside it despite a card overlap', () => {
+    const onRequestAddToContainer = vi.fn()
+    const target = containerNode('px1')
+    const dragged = makeNode('n1')
+    useCanvasStore.setState({ nodes: [target, dragged] })
+    rf.intersecting = [target]
+    rf.screenToFlow = vi.fn(() => ({ x: 5000, y: 5000 }))
+    render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, dragged, [dragged])
     expect(onRequestAddToContainer).not.toHaveBeenCalled()
   })
 
@@ -376,7 +390,7 @@ describe('CanvasContainer', () => {
     // Canvas order lists the outer container first; the inner one is the drop target.
     rf.intersecting = [outer, inner]
     render(<CanvasContainer onRequestAddToContainer={onRequestAddToContainer} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged, [dragged])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, dragged, [dragged])
     expect(onRequestAddToContainer).toHaveBeenCalledWith({ nodeIds: ['n1'], containerId: 'inner' })
   })
 
@@ -392,7 +406,7 @@ describe('CanvasContainer', () => {
     useCanvasStore.setState({ nodes: [outerZone, innerZone, dragged] })
     rf.intersecting = [outerZone, innerZone]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged, [dragged])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, dragged, [dragged])
     expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1'], zoneId: 'zInner' })
   })
 
@@ -401,7 +415,7 @@ describe('CanvasContainer', () => {
     const dragged = [makeNode('n1'), { ...makeNode('n2'), parentId: 'pxOther' }]
     rf.intersecting = [zoneNode('z1')]
     render(<CanvasContainer onRequestAddToZone={onRequestAddToZone} />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, dragged[0], dragged)
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, dragged[0], dragged)
     expect(onRequestAddToZone).toHaveBeenCalledWith({ nodeIds: ['n1'], zoneId: 'z1' })
   })
 
@@ -412,7 +426,7 @@ describe('CanvasContainer', () => {
     useCanvasStore.setState({ nodes: [zone, c1, c2] })
     rf.intersecting = []
     render(<CanvasContainer />)
-    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({} as MouseEvent, c1, [c1, c2])
+    ;(rfProps.onNodeDragStop as (...args: unknown[]) => unknown)({ clientX: 0, clientY: 0 } as MouseEvent, c1, [c1, c2])
     const after = useCanvasStore.getState().nodes
     expect(after.find((n) => n.id === 'n1')!.parentId).toBeUndefined()
     expect(after.find((n) => n.id === 'n2')!.parentId).toBeUndefined()
