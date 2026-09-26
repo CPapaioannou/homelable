@@ -787,7 +787,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                               placeholder="label"
                               className={`${INPUT} w-28 shrink-0`}
                             />
-                            <Select value={m.kind ?? 'range'} onValueChange={(v) => updateMetric(i, { kind: v })}>
+                            <Select value={m.kind ?? 'range'} onValueChange={(v) => { if (v != null) updateMetric(i, { kind: v }) }}>
                               <SelectTrigger className={`${INPUT} w-32 shrink-0`}>
                                 <SelectValue />
                               </SelectTrigger>
@@ -799,7 +799,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                             </Select>
                             <Input
                               value={m.unit ?? ''}
-                              onChange={(e) => updateMetric(i, { unit: e.target.value || null })}
+                              onChange={(e) => updateMetric(i, { unit: e.target.value || undefined })}
                               placeholder="unit"
                               className={`${INPUT} w-16 shrink-0`}
                             />
@@ -825,14 +825,14 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                                   <Input
                                     type="number"
                                     value={m.used ?? ''}
-                                    onChange={(e) => updateMetric(i, { used: e.target.value === '' ? null : Number(e.target.value) })}
+                                    onChange={(e) => updateMetric(i, { used: e.target.value === '' ? undefined : Number(e.target.value) })}
                                     placeholder="used"
                                     className={`${INPUT} font-mono w-20`}
                                   />
                                   <Input
                                     type="number"
                                     value={m.total ?? ''}
-                                    onChange={(e) => updateMetric(i, { total: e.target.value === '' ? null : Number(e.target.value) })}
+                                    onChange={(e) => updateMetric(i, { total: e.target.value === '' ? undefined : Number(e.target.value) })}
                                     placeholder="total"
                                     className={`${INPUT} font-mono w-20`}
                                   />
@@ -842,7 +842,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                                 <Input
                                   type="number"
                                   value={typeof m.value === 'number' ? m.value : ''}
-                                  onChange={(e) => updateMetric(i, { value: e.target.value === '' ? null : Number(e.target.value) })}
+                                  onChange={(e) => updateMetric(i, { value: e.target.value === '' ? undefined : Number(e.target.value) })}
                                   placeholder="value"
                                   className={`${INPUT} font-mono w-20`}
                                 />
@@ -850,14 +850,14 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                               <Input
                                 type="number"
                                 value={m.warn_at ?? ''}
-                                onChange={(e) => updateMetric(i, { warn_at: e.target.value === '' ? null : Number(e.target.value) })}
+                                onChange={(e) => updateMetric(i, { warn_at: e.target.value === '' ? undefined : Number(e.target.value) })}
                                 placeholder="warn at"
                                 className={`${INPUT} font-mono w-20`}
                               />
                               <Input
                                 type="number"
                                 value={m.crit_at ?? ''}
-                                onChange={(e) => updateMetric(i, { crit_at: e.target.value === '' ? null : Number(e.target.value) })}
+                                onChange={(e) => updateMetric(i, { crit_at: e.target.value === '' ? undefined : Number(e.target.value) })}
                                 placeholder="crit at"
                                 className={`${INPUT} font-mono w-20`}
                               />
