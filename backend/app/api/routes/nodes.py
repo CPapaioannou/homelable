@@ -230,7 +230,7 @@ async def update_node(
         node,
         facts,
         overwrite_scalars=True,
-        replace_lists="properties" in sent or "services" in sent,
+        replace_lists="properties" in sent or "services" in sent or "metrics" in sent,
     )
     await db.commit()
     await db.refresh(node)

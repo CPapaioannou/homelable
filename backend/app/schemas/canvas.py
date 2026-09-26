@@ -38,7 +38,7 @@ class NodeSave(BaseModel):
     container_mode: bool = False
     custom_colors: dict[str, Any] | None = None
     custom_icon: str | None = None
-    metric: dict[str, Any] | None = None
+    metrics: list[Any] = []
     cpu_count: int | None = None
     cpu_model: str | None = None
     ram_gb: float | None = None

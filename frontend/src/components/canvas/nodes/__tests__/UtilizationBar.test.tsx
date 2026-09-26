@@ -56,7 +56,7 @@ describe('metricPercent', () => {
 
 describe('UtilizationBar', () => {
   it('fills the bar to the used/total ratio with a green fill at 50%', () => {
-    const { container } = render(<UtilizationBar metric={metric(500, 1000)} subtextColor="#888" />)
+    const { container } = render(<UtilizationBar metrics={[metric(500, 1000)]} subtextColor="#888" />)
     const track = screen.getByRole('progressbar')
     expect((track as HTMLElement).getAttribute('aria-valuenow')).toBe('50')
     expect((track.firstElementChild as HTMLElement).style.width).toBe('50%')
@@ -64,27 +64,27 @@ describe('UtilizationBar', () => {
   })
 
   it('turns the fill amber at 75%', () => {
-    const { container } = render(<UtilizationBar metric={metric(750, 1000)} />)
+    const { container } = render(<UtilizationBar metrics={[metric(750, 1000)]} />)
     expect(barColor(container)).toBe(AMBER)
   })
 
   it('turns the fill red at 95%', () => {
-    const { container } = render(<UtilizationBar metric={metric(950, 1000)} />)
+    const { container } = render(<UtilizationBar metrics={[metric(950, 1000)]} />)
     expect(barColor(container)).toBe(RED)
   })
 
   it('prints the value line as "label: used / total unit (pct)"', () => {
-    render(<UtilizationBar metric={metric(512, 1000)} subtextColor="#888" />)
+    render(<UtilizationBar metrics={[metric(512, 1000)]} subtextColor="#888" />)
     expect(screen.getByText('Storage: 512 / 1000 GB (51%)')).toBeTruthy()
   })
 
   it('omits the value line when no subtext colour is provided', () => {
-    render(<UtilizationBar metric={metric(512, 1000)} />)
+    render(<UtilizationBar metrics={[metric(512, 1000)]} />)
     expect(screen.queryByText(/512 \/ 1000/)).toBeNull()
   })
 
   it('degrades to an empty green bar when the total is zero', () => {
-    const { container } = render(<UtilizationBar metric={metric(50, 0)} subtextColor="#888" />)
+    const { container } = render(<UtilizationBar metrics={[metric(50, 0)]} subtextColor="#888" />)
     expect(barColor(container)).toBe(GREEN)
     expect((screen.getByRole('progressbar') as HTMLElement).getAttribute('aria-valuenow')).toBe('0')
   })

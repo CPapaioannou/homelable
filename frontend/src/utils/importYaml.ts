@@ -103,8 +103,8 @@ export function parseYamlToCanvas(
       ...(typeof yn.rightHandles === 'number' ? { right_handles: yn.rightHandles } : {}),
       // Restore the port-number toggle (issue #272).
       ...(yn.showPortNumbers ? { show_port_numbers: true } : {}),
-      // Restore the generic utilisation gauge (e.g. a drive's storage bar).
-      ...(yn.metric ? { metric: yn.metric } : {}),
+      // Restore the generic utilisation gauges (e.g. a drive's storage bars).
+      ...(yn.metrics?.length ? { metrics: yn.metrics } : {}),
     }
 
     newNodes.push({

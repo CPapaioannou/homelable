@@ -126,6 +126,8 @@ export interface NodeProperty {
  * canvases may carry two different gauges.
  */
 export interface UtilizationMetric {
+  /** Stable machine id the agent targets when it updates this gauge. */
+  key?: string
   label: string
   used: number
   total: number
@@ -165,6 +167,8 @@ export interface InventoryEntry {
   vendor?: string | null
   lqi?: number | null
   properties?: NodeProperty[]
+  /** Generic utilisation gauges the device wears, updated by the agent. */
+  metrics?: UtilizationMetric[]
   discovered_at: string
   /** Curated facts, editable from the device detail modal. */
   label?: string | null
@@ -245,8 +249,8 @@ export interface NodeData extends Record<string, unknown> {
   properties?: NodeProperty[]
   parent_id?: string
   container_mode?: boolean
-  /** Generic utilisation gauge for the card header bar; null/absent = no bar. */
-  metric?: UtilizationMetric | null
+  /** Generic utilisation gauges for the card header bar; empty/absent = no bars. */
+  metrics?: UtilizationMetric[]
   custom_colors?: {
     border?: string
     background?: string

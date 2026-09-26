@@ -30,6 +30,7 @@ export const DEVICE_FACT_FIELDS = [
   'show_hardware',
   'services',
   'properties',
+  'metrics',
   'ieee_address',
 ] as const
 
@@ -208,6 +209,7 @@ export function deviceFactsToNodeData(device: InventoryEntry): Partial<NodeData>
     show_hardware: device.show_hardware ?? false,
     services: device.services ?? [],
     properties: device.properties ?? [],
+    metrics: device.metrics ?? [],
     ieee_address: device.ieee_address ?? undefined,
   }
 }

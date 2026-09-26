@@ -140,15 +140,18 @@ async def _device_context(db: AsyncSession, device_id: str) -> dict[str, Any]:
     All three are optional: a device may be on no canvas, in no rack and in no
     zone, and the template drops those sections rather than printing them empty.
     """
-    context: dict[str, Any] = {"zone_label": None, "rack": None, "connections": [], "metric": None}
+    context: dict[str, Any] = {"zone_label": None, "rack": None, "connections": [], "metrics": []}
+
+    # Metrics are a device fact — the gauges the device wears live on the inventory
+    # row, not on the node that draws it.
+    device = await db.get(InventoryDevice, device_id)
+    if device is not None:
+        context["metrics"] = list(device.metrics or [])
 
     node = (
         await db.execute(select(Node).where(Node.device_id == device_id).order_by(Node.created_at))
     ).scalars().first()
     if node is not None:
-        # The gauge a canvas node wears is presentation, so it is not on the
-        # inventory row — hand it to the template from the node that draws it.
-        context["metric"] = node.metric
         parent_id = node.parent_id
         seen: set[str] = set()
         while parent_id and parent_id not in seen:

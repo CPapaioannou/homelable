@@ -281,17 +281,14 @@ def _to_number(value: Any) -> float | None:
     return float(value)
 
 
-def block_utilization(device: Any, *, metric: dict[str, Any] | None = None, **_: Any) -> str:
-    """The utilisation gauge a canvas node wears (a drive's storage, a host's CPU/RAM).
+def _utilization_line(metric: Any) -> str | None:
+    """One utilisation line for a single gauge, or ``None`` when nothing is measurable.
 
-    The metric is presentation, so it lives on the node, not the inventory row —
-    the caller passes it in via context. Empty when there is nothing to show,
-    which drops the whole section from the document. The raw values are printed
-    as given (so an integer 8 stays "8", not "8.0"); only the percentage is
-    derived from their numeric form.
+    The raw values are printed as given (so an integer 8 stays "8", not "8.0");
+    only the percentage is derived from their numeric form.
     """
     if not isinstance(metric, dict):
-        return ""
+        return None
     label = str(metric.get("label") or "Utilisation")
     used_raw = metric.get("used")
     total_raw = metric.get("total")
@@ -299,12 +296,23 @@ def block_utilization(device: Any, *, metric: dict[str, Any] | None = None, **_:
     used_f = _to_number(used_raw)
     total_f = _to_number(total_raw)
     if used_f is None and total_f is None:
-        return ""  # nothing measurable — drop the section rather than print "None / None"
+        return None  # nothing measurable — skip the gauge rather than print "None / None"
     if total_f is None or total_f == 0.0:
         return f"- **{label}** — {used_raw} / {total_raw}{f' {unit}' if unit else ''}"
     pct = round(used_f / total_f * 100) if used_f is not None else None
     value = f"{used_raw} / {total_raw}{f' {unit}' if unit else ''}" + (f" ({pct}%)" if pct is not None else "")
     return f"- **{label}** — {value}"
+
+
+def block_utilization(device: Any, *, metrics: list[Any] | None = None, **_: Any) -> str:
+    """The utilisation gauges a device wears (a drive's storage, a host's CPU/RAM).
+
+    Metrics are a device fact now — ``device_inventory.metrics`` — a keyed list of
+    gauges, so one line per gauge in the device's own order. Empty when there is
+    nothing to show, which drops the whole section from the document.
+    """
+    lines = [line for line in (_utilization_line(m) for m in metrics or []) if line]
+    return "\n".join(lines)
 
 
 
@@ -438,7 +446,7 @@ def render_device_document(
     zone_label: str | None = None,
     rack: dict[str, Any] | None = None,
     connections: list[str] | None = None,
-    metric: dict[str, Any] | None = None,
+    metrics: list[Any] | None = None,
     today: date | None = None,
 ) -> str:
     """The full skeleton for a device, old notes appended verbatim."""
@@ -477,7 +485,7 @@ def render_device_document(
         "",
     ]
 
-    utilization = block_utilization(device, metric=metric)
+    utilization = block_utilization(device, metrics=metrics)
     if utilization:
         parts += ["### Utilization", "", utilization, ""]
 

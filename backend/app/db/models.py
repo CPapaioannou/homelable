@@ -64,11 +64,6 @@ class Node(Base):
     container_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     custom_colors: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     custom_icon: Mapped[str | None] = mapped_column(String, nullable=True)
-    # A generic utilisation gauge the card can draw (e.g. storage used/total on
-    # a drive, CPU or RAM on a host): {label, used, total, unit}. Presentation
-    # only, like custom_colors — the same device drawn on two canvases can
-    # carry two different gauges. NULL on every node without one.
-    metric: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     # What this piece of canvas furniture is for, in the user's words. Furniture
     # (group / groupRect / text) draws no device, so it has no inventory row to
     # carry a `notes` field — this column is that text's only home. NULL on every
@@ -256,6 +251,14 @@ class InventoryDevice(Base):
     # VMID). Generic NodeProperty shape {key,value,icon,visible}; merged into the
     # Node's properties on approve. Empty for scan/mesh sources that don't set it.
     properties: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    # Utilisation gauges the device wears, one entry per gauge: each is
+    # {key, label, used, total, unit}. `key` is a stable machine id ("cpu",
+    # "ram", "disk", …) an agent targets when it refreshes a reading; `label`
+    # is the human name the UI prints. A list rather than a single gauge so a
+    # device can show CPU *and* RAM *and* disk at once. A device fact — the row
+    # owns it, so every canvas drawing the device shows the same gauges and an
+    # agent writes one place. Empty for a device with no gauges.
+    metrics: Mapped[list[Any]] = mapped_column(JSON, default=list)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     # --- Curated device facts (3.3.0) -------------------------------------

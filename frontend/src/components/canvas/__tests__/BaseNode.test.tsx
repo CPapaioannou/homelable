@@ -309,7 +309,7 @@ describe('BaseNode — legacy hardware fallback', () => {
 
   it('renders the utilization bar when the node carries a metric', () => {
     const { container } = renderBaseNode({
-      metric: { label: 'Storage', used: 512, total: 1000, unit: 'GB' },
+      metrics: [{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }],
     })
     expect(screen.getByRole('progressbar')).toBeDefined()
     expect(container.querySelector('[role="progressbar"] div')).toBeTruthy()

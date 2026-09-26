@@ -189,7 +189,9 @@ async def init_db() -> None:
         with suppress(OperationalError):
             await conn.exec_driver_sql("ALTER TABLE nodes ADD COLUMN custom_icon TEXT")
         with suppress(OperationalError):
-            await conn.exec_driver_sql("ALTER TABLE nodes ADD COLUMN metric JSON")
+            await conn.exec_driver_sql("ALTER TABLE device_inventory ADD COLUMN metrics JSON")
+        with suppress(OperationalError):
+            await conn.exec_driver_sql("UPDATE device_inventory SET metrics = '[]' WHERE metrics IS NULL")
         with suppress(OperationalError):
             await conn.exec_driver_sql("ALTER TABLE edges ADD COLUMN source_handle TEXT")
         with suppress(OperationalError):
@@ -638,7 +640,6 @@ _NODE_COLUMNS_SQL = (
     "container_mode BOOLEAN,"
     "custom_colors JSON,"
     "custom_icon VARCHAR,"
-    "metric JSON,"
     "description TEXT,"
     "show_port_numbers BOOLEAN,"
     "width FLOAT,"
@@ -653,7 +654,7 @@ _NODE_COLUMNS_SQL = (
 
 _NODE_KEPT = (
     "id, type, label, design_id, device_id, display_view, pos_x, pos_y, parent_id, container_mode, "
-    "custom_colors, custom_icon, metric, description, show_port_numbers, width, height, bottom_handles, "
+    "custom_colors, custom_icon, description, show_port_numbers, width, height, bottom_handles, "
     "top_handles, left_handles, right_handles, created_at, updated_at"
 )
 

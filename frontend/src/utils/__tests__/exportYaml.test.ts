@@ -59,18 +59,18 @@ describe('exportCanvasToYaml', () => {
     expect(entry.cpuModel).toBe('Intel Xeon')
   })
 
-  it('serializes a utilization metric when present', () => {
-    const nodes = [makeNode({ label: 'SSD 1', type: 'drive', metric: { label: 'Storage', used: 512, total: 1000, unit: 'GB' } })]
+  it('serializes utilization metrics when present', () => {
+    const nodes = [makeNode({ label: 'SSD 1', type: 'drive', metrics: [{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }] })]
     const result = yaml.load(exportCanvasToYaml(nodes, [])) as object[]
     const entry = result[0] as Record<string, unknown>
-    expect(entry.metric).toEqual({ label: 'Storage', used: 512, total: 1000, unit: 'GB' })
+    expect(entry.metrics).toEqual([{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }])
   })
 
-  it('omits the metric key when a node has no gauge', () => {
+  it('omits the metrics key when a node has no gauge', () => {
     const nodes = [makeNode({ label: 'Server', type: 'server' })]
     const result = yaml.load(exportCanvasToYaml(nodes, [])) as object[]
     const entry = result[0] as Record<string, unknown>
-    expect(entry).not.toHaveProperty('metric')
+    expect(entry).not.toHaveProperty('metrics')
   })
 
   it('serializes parent relationship from parentId', () => {

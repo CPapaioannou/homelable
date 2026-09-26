@@ -140,12 +140,12 @@ export function BaseNode({ id, data, selected, icon: typeIcon, width, height }: 
         </div>
       </div>
 
-      {/* Generic utilisation gauge (e.g. a drive's storage bar) — any node
-          type can wear one; driven purely by the optional `metric` field. */}
-      {data.metric && (
+      {/* Generic utilisation gauges (e.g. a drive's storage bars) — any node
+          type can wear them; driven purely by the optional `metrics` list. */}
+      {data.metrics && data.metrics.length > 0 && (
         <>
           <div style={{ height: 1, background: `${colors.border}44`, margin: '0 8px' }} />
-          <UtilizationBar metric={data.metric} subtextColor={theme.colors.nodeSubtextColor} />
+          <UtilizationBar metrics={data.metrics} subtextColor={theme.colors.nodeSubtextColor} />
         </>
       )}
 

@@ -146,16 +146,16 @@ describe('serializeNode — regular node', () => {
     expect(result.container_mode).toBe(false)
   })
 
-  it('serializes a utilization metric', () => {
-    const metric = { label: 'Storage', used: 512, total: 1000, unit: 'GB' }
-    const node = makeRfNode({ data: { label: 'SSD', type: 'drive', status: 'unknown', services: [], metric } })
+  it('serializes utilization metrics', () => {
+    const metrics = [{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }]
+    const node = makeRfNode({ data: { label: 'SSD', type: 'drive', status: 'unknown', services: [], metrics } })
     const result = serializeNode(node)
-    expect(result.metric).toEqual(metric)
+    expect(result.metrics).toEqual(metrics)
   })
 
-  it('nulls the metric when absent', () => {
+  it('emits an empty metrics list when absent', () => {
     const result = serializeNode(makeRfNode())
-    expect(result.metric).toBeNull()
+    expect(result.metrics).toEqual([])
   })
 
   it('nulls optional fields when absent', () => {
@@ -398,19 +398,19 @@ describe('deserializeApiNode — regular node', () => {
     expect(result.data.right_handles).toBe(1)
   })
 
-  it('restores a utilization metric from the API payload', () => {
-    const metric = { label: 'Storage', used: 512, total: 1000, unit: 'GB' }
-    const result = deserializeApiNode(makeApiNode({ metric: metric as unknown }), emptyMap)
-    expect(result.data.metric).toEqual(metric)
+  it('restores utilization metrics from the API payload', () => {
+    const metrics = [{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }]
+    const result = deserializeApiNode(makeApiNode({ metrics: metrics as unknown }), emptyMap)
+    expect(result.data.metrics).toEqual(metrics)
   })
 
-  it('round-trips a metric through serialize then deserialize', () => {
-    const metric = { label: 'RAM', used: 12, total: 16, unit: 'GB' }
+  it('round-trips metrics through serialize then deserialize', () => {
+    const metrics = [{ label: 'RAM', used: 12, total: 16, unit: 'GB' }]
     const wire = serializeNode(
-      makeRfNode({ data: { label: 'Host', type: 'server', status: 'unknown', services: [], metric } }),
+      makeRfNode({ data: { label: 'Host', type: 'server', status: 'unknown', services: [], metrics } }),
     )
     const back = deserializeApiNode(wire as unknown as ApiNode, emptyMap)
-    expect(back.data.metric).toEqual(metric)
+    expect(back.data.metrics).toEqual(metrics)
   })
 
   it('sets parentId and extent for children of container proxmox', () => {

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { defaultNodeProperties } from '../nodeDefaults'
-import type { NodeType } from '@/types'
 
 describe('defaultNodeProperties', () => {
   it('seeds a drive with a media and an empty serial', () => {

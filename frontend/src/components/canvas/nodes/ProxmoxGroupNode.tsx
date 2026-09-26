@@ -105,10 +105,10 @@ export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
           />
         </div>
 
-        {/* Generic utilisation gauge under the container header, when set. */}
-        {data.metric && (
+        {/* Generic utilisation gauges under the container header, when set. */}
+        {data.metrics && data.metrics.length > 0 && (
           <div className="shrink-0" style={{ borderBottom: `1px solid ${glow}22` }}>
-            <UtilizationBar metric={data.metric} subtextColor={theme.colors.nodeSubtextColor} />
+            <UtilizationBar metrics={data.metrics} subtextColor={theme.colors.nodeSubtextColor} />
           </div>
         )}
 
