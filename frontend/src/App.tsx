@@ -232,7 +232,13 @@ export default function App() {
       const edgesToSave = edges.map(serializeEdge)
       const viewport: Record<string, unknown> = { theme_id: activeTheme }
       if (floorMap) viewport.floor_map = floorMap
-      await canvasApi.save({ nodes: nodesToSave, edges: edgesToSave, viewport, custom_style: customStyle, design_id: saveDesignId })
+      const res = await canvasApi.save({ nodes: nodesToSave, edges: edgesToSave, viewport, custom_style: customStyle, design_id: saveDesignId })
+      // A node created on the canvas only learns its inventory row from this
+      // response — pin the server's links so "open in inventory" works now, not
+      // after a reload.
+      if (res.data.node_device_ids) {
+        useCanvasStore.getState().applyDeviceIds(res.data.node_device_ids)
+      }
       markSaved()
       if (!options?.silent) toast.success('Canvas saved')
       return true

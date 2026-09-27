@@ -53,7 +53,10 @@ async def test_save_canvas_creates_nodes_and_edges(client: AsyncClient, headers:
 
     res = await client.post("/api/v1/canvas/save", json={"nodes": [n1, n2], "edges": [e1], "viewport": {"x": 1, "y": 2, "zoom": 1.5}}, headers=headers)
     assert res.status_code == 200
-    assert res.json() == {"saved": True}
+    body = res.json()
+    assert body["saved"] is True
+    # Server-assigned device links are reported back so the client can pin them.
+    assert isinstance(body.get("node_device_ids"), dict)
 
     canvas = (await client.get("/api/v1/canvas", headers=headers)).json()
     assert len(canvas["nodes"]) == 2
@@ -346,10 +349,12 @@ async def test_save_canvas_show_port_numbers_defaults_false(client: AsyncClient,
 
 
 async def test_save_canvas_hardware_fields_cleared_on_update(client: AsyncClient, headers: dict):
+    """An *explicit* clear (the field listed in changed_facts) blanks the row; a
+    bare snapshot never does, so a stale save cannot wipe a discovered value."""
     n1 = node_payload(cpu_count=8, ram_gb=32.0)
     await client.post("/api/v1/canvas/save", json={"nodes": [n1], "edges": [], "viewport": {}}, headers=headers)
 
-    n1_cleared = {**n1, "cpu_count": None, "ram_gb": None}
+    n1_cleared = {**n1, "cpu_count": None, "ram_gb": None, "changed_facts": ["cpu_count", "ram_gb"]}
     await client.post("/api/v1/canvas/save", json={"nodes": [n1_cleared], "edges": [], "viewport": {}}, headers=headers)
 
     canvas = (await client.get("/api/v1/canvas", headers=headers)).json()

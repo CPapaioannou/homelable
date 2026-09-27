@@ -388,7 +388,9 @@ export function DeviceInventoryModal({ open, onClose, highlightId, initialStatus
         id: nodeId,
         type: nodeData.type,
         position: getCenteredPosition(),
-        data: { ...nodeData, status: wireless ? ('online' as const) : ('unknown' as const) },
+        // Carry the server's device link so a save right after approve sends the
+        // real device_id rather than null (which would orphan + re-mint the row).
+        data: { ...nodeData, status: wireless ? ('online' as const) : ('unknown' as const), device_id: res.data.device_id },
       })
       injectAutoEdges(res.data.edges)
       const extra = res.data.edges_created > 0 ? ` (+${res.data.edges_created} link${res.data.edges_created !== 1 ? 's' : ''})` : ''

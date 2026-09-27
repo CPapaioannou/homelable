@@ -57,7 +57,7 @@ async def load_canvas(
 @router.post("/save")
 async def save_canvas(
     body: CanvasSaveRequest, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)
-) -> dict[str, bool | str]:
+) -> dict[str, Any]:
     design_id = body.design_id
     if design_id is None:
         first = (await db.execute(select(Design).order_by(Design.created_at).limit(1))).scalar()
@@ -105,6 +105,13 @@ async def save_canvas(
         columns = node_columns(payload)
         if db_node:
             for field, value in columns.items():
+                # ``device_id`` is a server-managed link (set at approve / merge /
+                # link time). A null in the payload means the client does not know
+                # it — never clobber a live link with that, or a save would orphan
+                # the node and ``link_facts`` would mint a duplicate row for a
+                # device that has no ip/mac to re-match on.
+                if field == "device_id" and value is None and db_node.device_id:
+                    continue
                 setattr(db_node, field, value)
         else:
             db_node = Node(**columns)
@@ -150,4 +157,10 @@ async def save_canvas(
         db.add(CanvasState(design_id=design_id, viewport=body.viewport, custom_style=body.custom_style))
 
     await db.commit()
-    return {"saved": True}
+    # The server is the authority on which inventory row each node draws. A node
+    # created on the canvas has no device_id the client knows yet — link_facts
+    # just assigned it — so hand the mapping back and the client will pin it onto
+    # its nodes. Without this the "open in inventory" link stays dead until a
+    # full reload re-hydrates it.
+    node_device_ids = {n.id: n.device_id for n, _, _ in saved if n.device_id}
+    return {"saved": True, "node_device_ids": node_device_ids}

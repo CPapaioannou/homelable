@@ -49,7 +49,7 @@ export const canvasApi = {
     viewport: object
     custom_style?: object | null
     design_id?: string | null
-  }) => api.post('/canvas/save', payload),
+  }) => api.post<{ saved: boolean; node_device_ids?: Record<string, string> }>('/canvas/save', payload),
 }
 
 export const mediaApi = {
@@ -223,6 +223,7 @@ export const scanApi = {
     api.post<{
       approved: boolean
       node_id: string
+      device_id: string
       edges_created: number
       edges: { id: string; source: string; target: string; type?: string; source_handle?: string | null; target_handle?: string | null; lqi?: number | null }[]
     }>(`/scan/pending/${id}/approve`, nodeData),
