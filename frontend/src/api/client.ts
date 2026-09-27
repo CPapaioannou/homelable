@@ -49,7 +49,7 @@ export const canvasApi = {
     viewport: object
     custom_style?: object | null
     design_id?: string | null
-  }) => api.post('/canvas/save', payload),
+  }) => api.post<{ saved: boolean; node_device_ids?: Record<string, string> }>('/canvas/save', payload),
 }
 
 export const mediaApi = {

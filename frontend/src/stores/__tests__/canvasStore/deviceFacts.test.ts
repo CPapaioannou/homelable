@@ -161,3 +161,29 @@ describe('canvasStore — applyDeviceFacts keeps each node\'s arrangement', () =
     expect(useCanvasStore.getState().hasUnsavedChanges).toBe(false)
   })
 })
+
+describe('canvasStore — applyDeviceIds', () => {
+  beforeEach(resetStore)
+
+  it('pins a server-assigned device link onto a node that lacks one', () => {
+    // A node created on the canvas has no device_id until the save returns it.
+    const node = makeNode('n1', makeNodeData({ label: 'New Box', ip: '10.99.99.99' }))
+    useCanvasStore.getState().loadCanvas([node], [])
+    expect(useCanvasStore.getState().nodes[0].data.device_id).toBeUndefined()
+
+    useCanvasStore.getState().applyDeviceIds({ n1: 'd-new' })
+    expect(useCanvasStore.getState().nodes[0].data.device_id).toBe('d-new')
+  })
+
+  it('leaves already-linked and unmapped nodes untouched', () => {
+    const linked = makeNode('n1', makeNodeData({ device_id: 'd-1', label: 'NAS' }))
+    const other = makeNode('n2', makeNodeData({ label: 'Router' }))
+    useCanvasStore.getState().loadCanvas([linked, other], [])
+
+    // d-1 is a no-op (already linked); n2 is unmapped (stays untouched).
+    useCanvasStore.getState().applyDeviceIds({ n1: 'd-1' })
+    const s = useCanvasStore.getState()
+    expect(s.nodes[0].data.device_id).toBe('d-1')
+    expect(s.nodes[1].data.device_id).toBeUndefined()
+  })
+})

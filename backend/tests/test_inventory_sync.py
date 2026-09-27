@@ -1313,6 +1313,36 @@ class TestRoutesKeepTheLinkInStep:
         await db_session.refresh(node)
         assert node.device_id == "d-drive"
 
+    @pytest.mark.asyncio
+    async def test_save_returns_node_device_ids_for_newly_linked_nodes(
+        self, client: AsyncClient, headers, db_session
+    ):
+        """A node created on the canvas learns its inventory row from the save
+        response, so the client can pin the link without a full reload."""
+        design_id = (await client.post("/api/v1/designs", json={"name": "A"}, headers=headers)).json()["id"]
+        node = {
+            "id": str(uuid.uuid4()),
+            "type": "server",
+            "label": "New Box",
+            "status": "unknown",
+            "pos_x": 0,
+            "pos_y": 0,
+            "ip": "10.99.99.99",
+        }
+        res = await client.post(
+            "/api/v1/canvas/save",
+            json={"design_id": design_id, "nodes": [node], "edges": [], "viewport": {}},
+            headers=headers,
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["saved"] is True
+        # The new node is mapped to the device row link_facts just created.
+        device_id = body["node_device_ids"].get(node["id"])
+        assert device_id
+        # ...and that row really exists.
+        assert await db_session.get(InventoryDevice, device_id) is not None
+
 
 class TestPerNodeView:
     """Order and visibility belong to the node, the facts to the row.

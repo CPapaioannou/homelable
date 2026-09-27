@@ -53,7 +53,10 @@ async def test_save_canvas_creates_nodes_and_edges(client: AsyncClient, headers:
 
     res = await client.post("/api/v1/canvas/save", json={"nodes": [n1, n2], "edges": [e1], "viewport": {"x": 1, "y": 2, "zoom": 1.5}}, headers=headers)
     assert res.status_code == 200
-    assert res.json() == {"saved": True}
+    body = res.json()
+    assert body["saved"] is True
+    # Server-assigned device links are reported back so the client can pin them.
+    assert isinstance(body.get("node_device_ids"), dict)
 
     canvas = (await client.get("/api/v1/canvas", headers=headers)).json()
     assert len(canvas["nodes"]) == 2

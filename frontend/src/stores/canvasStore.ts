@@ -272,6 +272,7 @@ interface CanvasState {
    * hasUnsavedChanges alone.
    */
   applyDeviceFacts: (deviceId: string, facts: Partial<NodeData>) => void
+  applyDeviceIds: (nodeDeviceIds: Record<string, string>) => void
   // Live per-service status overlay (not persisted), keyed via serviceStatusKey.
   serviceStatuses: Record<string, ServiceStatus>
 
@@ -1203,6 +1204,21 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       // up. Rebasing alongside is what keeps the next save from claiming the
       // inventory's own edit as a canvas edit.
       return changed ? { nodes, factsBaseline } : {}
+    }),
+
+  // Pin the server-assigned device links onto the nodes that just saved. A node
+  // created on the canvas learns its inventory row only from the save response,
+  // so without this the "open in inventory" link is dead until a full reload.
+  applyDeviceIds: (nodeDeviceIds) =>
+    set((state) => {
+      let changed = false
+      const nodes = state.nodes.map((n) => {
+        const deviceId = nodeDeviceIds[n.id]
+        if (deviceId === undefined || n.data.device_id === deviceId) return n
+        changed = true
+        return { ...n, data: { ...n.data, device_id: deviceId } }
+      })
+      return changed ? { nodes } : {}
     }),
 
   markUnsaved: () => set({ hasUnsavedChanges: true }),
