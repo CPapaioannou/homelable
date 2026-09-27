@@ -607,7 +607,7 @@ async def init_db() -> None:
     await _drop_legacy_node_columns()
     await _seed_node_views()
     await _backfill_zone_size()
-    await _repair_self_parent_nodes()
+    await _repair_node_hierarchies()
     await _reindex_documents_fts()
 
 
@@ -928,45 +928,79 @@ async def _backfill_zone_size() -> None:
         logger.warning("Backfilling zone width/height failed: %s", exc)
 
 
-async def _repair_self_parent_nodes() -> None:
-    """Detach any node that is recorded as its own parent.
-
-    Several write paths could persist ``parent_id = id`` before the guards
-    added alongside this repair: a YAML import resolving a parent by a label
-    that mapped back to the node, the node dedupe re-pointing a canonical node
-    that had been nested under one of its own duplicates, and any client PATCH
-    or canvas save, neither of which validated it (#370).
-
-    The row is fatal on the canvas: the parent walks assume an acyclic tree, so
-    dragging the node overflowed the stack inside the change reducer and the
-    move was silently dropped — the node selected but would not move. It also
-    renders unparented, so it sits wherever its stored coordinates put it
-    rather than inside the container it appears to belong to.
-
-    Clearing the column is the only safe repair: the real parent is not
-    recoverable from the row, and NULL simply returns the node to the top level
-    where the user can re-nest it. Idempotent — a second run matches nothing.
-
-    Never fatal: a failure here leaves the row as it was, and the runtime cycle
-    guards keep the canvas usable either way.
-    """
+async def _repair_node_hierarchies() -> None:
+    """Detach missing/cross-design parents and one deterministic edge per cycle."""
     try:
         async with engine.begin() as conn:
             rows = (
                 await conn.exec_driver_sql(
-                    "SELECT id, label FROM nodes WHERE parent_id IS NOT NULL AND parent_id = id"
+                    "SELECT id, label, parent_id, design_id, updated_at FROM nodes"
                 )
             ).fetchall()
             if not rows:
                 return
-            await conn.exec_driver_sql(
-                "UPDATE nodes SET parent_id = NULL WHERE parent_id IS NOT NULL AND parent_id = id"
-            )
-            for node_id, label in rows:
-                logger.info("Detached self-parented node %s (%s)", node_id, label)
-            logger.info("Repaired %d node(s) recorded as their own parent", len(rows))
+            by_id = {str(row[0]): row for row in rows}
+            parent_of = {str(row[0]): (str(row[2]) if row[2] is not None else None) for row in rows}
+            detached: set[str] = set()
+
+            async def detach(node_id: str, reason: str, cycle: list[str] | None = None) -> None:
+                if node_id in detached:
+                    return
+                old_parent = parent_of.get(node_id)
+                await conn.exec_driver_sql(
+                    "UPDATE nodes SET parent_id = NULL WHERE id = ?", (node_id,)
+                )
+                parent_of[node_id] = None
+                detached.add(node_id)
+                row = by_id[node_id]
+                logger.warning(
+                    "Repaired node hierarchy design=%s reason=%s cycle=%s detached=%s->%s",
+                    row[3], reason, cycle or [], node_id, old_parent,
+                )
+
+            for node_id, row in by_id.items():
+                parent_id = parent_of[node_id]
+                if not parent_id:
+                    continue
+                parent = by_id.get(parent_id)
+                if parent is None:
+                    await detach(node_id, "missing-parent")
+                elif parent[3] != row[3]:
+                    await detach(node_id, "cross-design-parent")
+
+            # Repeat because cutting one edge can expose another disjoint cycle.
+            while True:
+                found = False
+                for start_id in by_id:
+                    path: list[str] = []
+                    at: dict[str, int] = {}
+                    current_id: str | None = start_id
+                    while current_id and current_id in by_id:
+                        if current_id in at:
+                            cycle = path[at[current_id] :]
+                            victim = max(
+                                cycle,
+                                key=lambda node_id: (str(by_id[node_id][4] or ""), node_id),
+                            )
+                            await detach(victim, "cycle", cycle)
+                            found = True
+                            break
+                        at[current_id] = len(path)
+                        path.append(current_id)
+                        current_id = parent_of.get(current_id)
+                    if found:
+                        break
+                if not found:
+                    break
+
+            if detached:
+                logger.info("Repaired %d malformed node hierarchy relationship(s)", len(detached))
     except Exception as exc:  # pragma: no cover - defensive, boot must not die
-        logger.warning("Repairing self-parented nodes failed: %s", exc)
+        logger.warning("Repairing node hierarchies failed: %s", exc)
+
+
+# Kept for extensions/tests that called the old startup repair directly.
+_repair_self_parent_nodes = _repair_node_hierarchies
 
 
 async def _reindex_documents_fts() -> None:

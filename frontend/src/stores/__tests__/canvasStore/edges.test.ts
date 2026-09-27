@@ -143,11 +143,11 @@ describe('canvasStore — edges', () => {
     expect(hasUnsavedChanges).toBe(true)
   })
 
-  it('setProxmoxContainerMode ON nests children inside proxmox', () => {
+  it('setContainerMode ON nests children inside proxmox', () => {
     const proxmox: Node<NodeData> = { id: 'px', type: 'proxmox', position: { x: 0, y: 0 }, data: { label: 'px', type: 'proxmox', status: 'unknown', services: [], container_mode: false } }
     const child = makeNode('vm1', { parent_id: 'px', type: 'vm' })
     useCanvasStore.setState({ nodes: [proxmox, child] })
-    useCanvasStore.getState().setProxmoxContainerMode('px', true)
+    useCanvasStore.getState().setContainerMode('px', true)
     const { nodes } = useCanvasStore.getState()
     const updatedProxy = nodes.find((n) => n.id === 'px')
     const updatedChild = nodes.find((n) => n.id === 'vm1')

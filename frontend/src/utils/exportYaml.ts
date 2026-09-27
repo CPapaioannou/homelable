@@ -68,9 +68,6 @@ export function exportCanvasToYaml(nodes: Node<NodeData>[], edges: Edge<EdgeData
   for (const node of nodes) {
     const d = node.data
 
-    // Skip groupRect nodes — they are canvas decoration only
-    if (d.type === 'groupRect') continue
-
     const entry: YamlNode = {
       nodeType: d.type,
       label: d.label,
@@ -82,6 +79,13 @@ export function exportCanvasToYaml(nodes: Node<NodeData>[], edges: Edge<EdgeData
     if (d.check_method && d.check_method !== 'none') entry.checkMethod = d.check_method
     if (d.check_target) entry.checkTarget = d.check_target
     if (d.notes) entry.notes = d.notes
+    if (d.container_mode === true) entry.containerMode = true
+    if (d.container_mode === true || d.type === 'groupRect' || d.type === 'group') {
+      const width = node.width ?? node.measured?.width
+      const height = node.height ?? node.measured?.height
+      if (width != null) entry.width = width
+      if (height != null) entry.height = height
+    }
 
     // Hardware specs — omit zero values
     if (d.cpu_model) entry.cpuModel = d.cpu_model
@@ -97,12 +101,13 @@ export function exportCanvasToYaml(nodes: Node<NodeData>[], edges: Edge<EdgeData
 
     // Parent relationship: if this node has a parentId in React Flow,
     // encode it as a 'parent' connection using any virtual edge between them.
-    if (node.parentId) {
-      const parentLabel = idToLabel.get(node.parentId) ?? node.parentId
+    const parentId = node.data.parent_id ?? node.parentId
+    if (parentId) {
+      const parentLabel = idToLabel.get(parentId) ?? parentId
       // Find an edge between parent and this node (either direction)
       const parentEdges = [
-        ...(edgesBySource.get(node.parentId) ?? []).filter((e) => e.target === node.id),
-        ...(edgesByTarget.get(node.parentId) ?? []).filter((e) => e.source === node.id),
+        ...(edgesBySource.get(parentId) ?? []).filter((e) => e.target === node.id),
+        ...(edgesByTarget.get(parentId) ?? []).filter((e) => e.source === node.id),
       ]
       const pEdge = parentEdges[0]
       const linkType: EdgeType = (pEdge?.data?.type as EdgeType) ?? 'virtual'
@@ -111,7 +116,7 @@ export function exportCanvasToYaml(nodes: Node<NodeData>[], edges: Edge<EdgeData
       // Import always rebuilds this edge parent→child, so orient the handles the
       // same way (swap when the stored edge runs child→parent).
       if (pEdge) {
-        const parentToChild = pEdge.source === node.parentId
+        const parentToChild = pEdge.source === parentId
         const srcH = parentToChild ? pEdge.sourceHandle : pEdge.targetHandle
         const tgtH = parentToChild ? pEdge.targetHandle : pEdge.sourceHandle
         if (srcH) entry.parent.sourceHandle = srcH

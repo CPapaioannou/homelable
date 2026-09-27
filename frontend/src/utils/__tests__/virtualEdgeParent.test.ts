@@ -42,9 +42,12 @@ describe('isValidParentNode', () => {
     expect(isValidParentNode('groupRect', { type: 'group' })).toBe(false)
   })
 
+  it('accepts a zone as the parent of a device child', () => {
+    expect(isValidParentNode('server', { type: 'groupRect' })).toBe(true)
+  })
+
   it('rejects a non-container node that no type rule allows', () => {
     expect(isValidParentNode('server', { type: 'proxmox', container_mode: false })).toBe(false)
-    expect(isValidParentNode('server', { type: 'groupRect' })).toBe(false)
   })
 })
 

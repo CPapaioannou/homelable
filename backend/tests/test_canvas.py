@@ -778,6 +778,51 @@ async def test_save_canvas_keeps_a_real_parent(client: AsyncClient, headers: dic
     assert saved["pihole"]["parent_id"] == host["id"]
 
 
+async def test_save_canvas_rejects_a_multi_node_cycle(client: AsyncClient, headers: dict):
+    outer = node_payload(label="outer", container_mode=True)
+    inner = node_payload(label="inner", container_mode=True, parent_id=outer["id"])
+    outer["parent_id"] = inner["id"]
+
+    res = await client.post(
+        "/api/v1/canvas/save",
+        json={"nodes": [outer, inner], "edges": [], "viewport": {}},
+        headers=headers,
+    )
+
+    assert res.status_code == 409
+    assert set(res.json()["detail"]["node_ids"]) == {outer["id"], inner["id"]}
+
+
+async def test_save_canvas_rejects_missing_parent(client: AsyncClient, headers: dict):
+    child = node_payload(label="child", parent_id="missing")
+    res = await client.post(
+        "/api/v1/canvas/save",
+        json={"nodes": [child], "edges": [], "viewport": {}},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+
+async def test_save_canvas_rejects_nested_fixed_group_and_text_parent(client: AsyncClient, headers: dict):
+    container = node_payload(label="container", container_mode=True)
+    group = node_payload(label="group", type="group", parent_id=container["id"])
+    res = await client.post(
+        "/api/v1/canvas/save",
+        json={"nodes": [container, group], "edges": [], "viewport": {}},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+    annotation = node_payload(label="annotation", type="text")
+    child = node_payload(label="child", parent_id=annotation["id"])
+    res = await client.post(
+        "/api/v1/canvas/save",
+        json={"nodes": [annotation, child], "edges": [], "viewport": {}},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+
 # ── furniture descriptions ───────────────────────────────────────────────────
 
 async def test_save_canvas_keeps_zone_and_group_descriptions(client: AsyncClient, headers: dict):

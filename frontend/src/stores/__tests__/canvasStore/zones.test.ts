@@ -234,8 +234,9 @@ describe('canvasStore — batch parenting (#365)', () => {
     const nodes = useCanvasStore.getState().nodes
     expect(nodes.find((n) => n.id === 'n1')!.extent).toBe('parent')
     expect(nodes.find((n) => n.id === 'n1')!.position).toEqual({ x: 60, y: 120 })
-    // Dropped on the group's own corner: clamped to the 8px inset.
-    expect(nodes.find((n) => n.id === 'n2')!.position).toEqual({ x: 8, y: 8 })
+    // Dropped on the group's own corner: clamped to the 8px side inset and
+    // the 42px header-band inset at the top.
+    expect(nodes.find((n) => n.id === 'n2')!.position).toEqual({ x: 8, y: 42 })
   })
 
   it('removeNodesFromGroup detaches the whole selection in one undo step', () => {

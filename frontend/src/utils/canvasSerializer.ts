@@ -3,6 +3,7 @@ import type { NodeData, EdgeData, Waypoint } from '@/types'
 import { normalizeHandle, clampHandles, handleId, handleCountField, type Side } from '@/utils/handleUtils'
 import { normalizeMarker } from '@/utils/edgeMarkers'
 import { changedFactFields, type FactsBaseline } from '@/utils/deviceFacts'
+import { repairHierarchy } from '@/utils/nodeHierarchy'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -201,7 +202,7 @@ export function serializeEdge(e: Edge<EdgeData>): Record<string, unknown> {
 
 export function deserializeApiNode(
   n: ApiNode,
-  proxmoxContainerMap: Map<string, boolean>,
+  containerMap: Map<string, boolean>,
   /** Ids of groupRect zones, which parent their contents without clamping them. */
   zoneIds?: Set<string>,
 ): Node<NodeData> {
@@ -217,6 +218,8 @@ export function deserializeApiNode(
     // first-class field on NodeData. Tolerates legacy saves that already had
     // it there from before the type was promoted.
     const collapsed = Boolean(n.custom_colors?.collapsed)
+    const parentIsZone = n.parent_id ? (zoneIds?.has(n.parent_id) ?? false) : false
+    const parentIsClamped = n.parent_id ? (containerMap.get(n.parent_id) ?? false) : false
     return {
       id: n.id,
       type: 'groupRect',
@@ -225,10 +228,14 @@ export function deserializeApiNode(
       width: w,
       height: h,
       zIndex: z - 10,
-      ...(n.parent_id ? { parentId: n.parent_id, extent: 'parent' as const } : {}),
+      ...(n.parent_id && parentIsZone
+        ? { parentId: n.parent_id }
+        : n.parent_id && parentIsClamped
+          ? { parentId: n.parent_id, extent: 'parent' as const }
+          : {}),
     }
   }
-  const parentIsContainer = n.parent_id ? (proxmoxContainerMap.get(n.parent_id) ?? false) : false
+  const parentIsContainer = n.parent_id ? (containerMap.get(n.parent_id) ?? false) : false
   // A node dropped inside a zone is parented (so the zone moves it) but never
   // extent-clamped — it must stay draggable back out.
   const parentIsZone = n.parent_id ? (zoneIds?.has(n.parent_id) ?? false) : false
@@ -257,7 +264,7 @@ export function deserializeApiNode(
     // nodes nested inside a container — restores its own saved width/height.
     // Gating on container_mode (not type) is what keeps a resized nested node
     // from snapping back to content-fit on reload.
-    ...(['proxmox', 'vm', 'lxc', 'docker_host'].includes(normalizedType) && n.container_mode !== false
+    ...(n.container_mode === true
       ? { width: n.width ?? 300, height: n.height ?? 200 }
       : {
           ...(n.width ? { width: n.width } : {}),
@@ -336,15 +343,21 @@ export function migrateClusterHandles(
 export function deserializeApiCanvas(
   apiNodes: ApiNode[],
   apiEdges: ApiEdge[],
-): { nodes: Node<NodeData>[]; edges: Edge<EdgeData>[] } {
-  const proxmoxContainerMap = new Map<string, boolean>(
+): {
+  nodes: Node<NodeData>[]
+  edges: Edge<EdgeData>[]
+  repairs: ReturnType<typeof repairHierarchy>['repairs']
+} {
+  const containerMap = new Map<string, boolean>(
     apiNodes
       .filter((n) => n.type === 'group' || n.container_mode === true)
       .map((n) => [n.id, true])
   )
   const zoneIds = new Set(apiNodes.filter((n) => n.type === 'groupRect').map((n) => n.id))
-  return migrateClusterHandles(
-    apiNodes.map((n) => deserializeApiNode(n, proxmoxContainerMap, zoneIds)),
+  const migrated = migrateClusterHandles(
+    apiNodes.map((n) => deserializeApiNode(n, containerMap, zoneIds)),
     apiEdges.map(deserializeApiEdge),
   )
+  const repaired = repairHierarchy(migrated.nodes)
+  return { ...migrated, nodes: repaired.nodes, repairs: repaired.repairs }
 }

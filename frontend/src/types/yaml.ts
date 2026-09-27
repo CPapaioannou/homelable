@@ -37,4 +37,8 @@ export interface YamlNode {
   // Whether port-number labels are shown next to connection points. Only written
   // when enabled so the toggle round-trips through export/import (issue #272).
   showPortNumbers?: boolean
+  /** Canvas-specific visual container settings (optional for older files). */
+  containerMode?: boolean
+  width?: number
+  height?: number
 }

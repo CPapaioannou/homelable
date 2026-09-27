@@ -1,10 +1,11 @@
 import { createElement, useEffect } from 'react'
 import { NodeResizer, useUpdateNodeInternals, type NodeProps, type Node } from '@xyflow/react'
-import { Layers } from 'lucide-react'
+import { Layers, type LucideIcon } from 'lucide-react'
 import type { NodeData } from '@/types'
 import { resolveNodeColors } from '@/utils/nodeColors'
 import { resolveNodeIcon, isBrandIconKey } from '@/utils/nodeIcons'
 import { NodeIcon } from '@/components/ui/NodeIcon'
+import { ServiceIcon } from '@/components/ui/ServiceIcon'
 import { resolvePropertyIcon } from '@/utils/propertyIcons'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { maskIp, splitIps } from '@/utils/maskIp'
@@ -13,8 +14,14 @@ import { THEMES } from '@/utils/themes'
 import { BaseNode } from './BaseNode'
 import { SideHandles } from './SideHandles'
 
-export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
+interface ContainerNodeProps extends NodeProps<Node<NodeData>> {
+  icon?: LucideIcon
+}
+
+/** Generic visual container used by every inventory-backed device type. */
+export function ContainerNode(props: ContainerNodeProps) {
   const { id, data, selected } = props
+  const typeIcon = props.icon ?? Layers
   const updateNodeInternals = useUpdateNodeInternals()
   useEffect(() => { updateNodeInternals(id) }, [data.top_handles, data.bottom_handles, data.left_handles, data.right_handles, id, updateNodeInternals])
 
@@ -29,13 +36,14 @@ export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
   // flag unset and so render like a manually-created proxmox node. Cluster links
   // use the configurable per-side connection points (see BaseNode / SideHandles).
   if (data.container_mode !== true) {
-    return <BaseNode {...props} icon={Layers} />
+    return <BaseNode {...props} icon={typeIcon} />
   }
 
   const statusColor = theme.colors.statusColors[data.status]
   const isOnline = data.status === 'online'
   const glow = colors.border
-  const resolvedIcon = resolveNodeIcon(Layers, data.custom_icon)
+  const resolvedIcon = resolveNodeIcon(typeIcon, data.custom_icon)
+  const visibleServices = (data.services ?? []).filter((service) => service.visible !== false)
 
   return (
     <>
@@ -76,7 +84,7 @@ export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
             }}
           >
             {isBrandIconKey(data.custom_icon)
-              ? <NodeIcon typeIcon={Layers} customIconKey={data.custom_icon} size={12} />
+              ? <NodeIcon typeIcon={typeIcon} customIconKey={data.custom_icon} size={12} />
               : createElement(resolvedIcon, { size: 12 })}
           </div>
           <div className="flex flex-col min-w-0 flex-1">
@@ -128,6 +136,22 @@ export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
           )
         })}
 
+        {data.custom_colors?.show_services === true && visibleServices.length > 0 && (
+          <div className="flex flex-wrap gap-1 px-2.5 py-1 border-t shrink-0" style={{ borderColor: `${glow}22` }}>
+            {visibleServices.map((service, index) => (
+              <span
+                key={`${service.service_name}-${service.port ?? index}`}
+                className="inline-flex items-center gap-1 text-[9px] min-w-0"
+                style={{ color: theme.colors.nodeSubtextColor }}
+                title={service.port ? `${service.service_name}:${service.port}` : service.service_name}
+              >
+                <ServiceIcon iconKey={service.icon} size={9} />
+                <span className="truncate">{service.service_name}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Inner area — React Flow places children here */}
         <div className="flex-1 relative" />
       </div>
@@ -140,4 +164,9 @@ export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
       />
     </>
   )
+}
+
+/** Backward-compatible named export for direct consumers and older tests. */
+export function ProxmoxGroupNode(props: NodeProps<Node<NodeData>>) {
+  return <ContainerNode {...props} icon={Layers} />
 }

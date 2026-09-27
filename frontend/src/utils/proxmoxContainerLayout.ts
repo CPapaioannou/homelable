@@ -23,7 +23,7 @@ export const CONTAINER_LAYOUT = {
   gapY: 14,
   maxCols: 3,
   hostGap: 60,
-  /** Same defaults `setProxmoxContainerMode` gives a host with no size yet. */
+  /** Same defaults `setContainerMode` gives a host with no size yet. */
   minHostWidth: 300,
   minHostHeight: 200,
   looseCols: 4,

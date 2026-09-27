@@ -359,6 +359,38 @@ describe('parseYamlToCanvas', () => {
     warnSpy.mockRestore()
   })
 
+  it('restores explicit arbitrary container mode and dimensions', () => {
+    const yaml = `
+- nodeType: router
+  label: Router container
+  containerMode: true
+  width: 420
+  height: 260
+`
+    const { nodes } = parseYamlToCanvas(yaml, empty, emptyEdges)
+    expect(nodes[0].data.container_mode).toBe(true)
+    expect(nodes[0].width).toBe(420)
+    expect(nodes[0].height).toBe(260)
+  })
+
+  it('infers container mode for a legacy YAML visual parent', () => {
+    const yaml = `
+- nodeType: generic
+  label: Outer
+- nodeType: proxmox
+  label: Inner
+  parent:
+    label: Outer
+    linkType: virtual
+`
+    const { nodes } = parseYamlToCanvas(yaml, empty, emptyEdges)
+    const outer = nodes.find((node) => node.data.label === 'Outer')!
+    const inner = nodes.find((node) => node.data.label === 'Inner')!
+    expect(outer.data.container_mode).toBe(true)
+    expect(inner.parentId).toBe(outer.id)
+    expect(inner.extent).toBe('parent')
+  })
+
   // Regression for issue #208.
   it('restores edge connection points from the YAML link', () => {
     const yaml = `

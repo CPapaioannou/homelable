@@ -5,6 +5,19 @@ All notable changes to **Homelable** are documented here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Features
+
+- Any non-furniture device type can now opt into **container mode** and hold nested devices, with arbitrary-depth stacking and an acyclic parent hierarchy. A generic container renderer (metadata band, visible services, resizable) replaces the Proxmox-specific one, and container dimensions survive save/reload. Disabling container mode promotes the children one level without moving them.
+- Deleting a nonempty device container opens a three-action dialog: **Delete container only** (children are promoted to the nearest surviving parent, positions preserved), **Delete entire subtree**, or cancel. Deletion is centralised in one undoable store action shared by keyboard, mouse and the node editor.
+- The backend validates node hierarchies before canvas saves and node writes: multi-node cycles are rejected with HTTP 409 (naming the involved nodes) and invalid parents with 400. Boot repair now detaches every malformed persisted link — self-parents, cycles, missing parents and cross-design parents — and logs each repair.
+- YAML export/import round-trips `containerMode`, container `width`/`height`, and zone nesting; older files that nested devices visually are given container mode on import.
+
+### Fixes
+
+- Dragging a node onto a container now targets the deepest container under the release point instead of the first overlapping one, so slight card-edge overlaps no longer trigger the add-to-parent dialog and nested targets are offered correctly.
+
 ## [3.5.1] - 2026-09-25
 
 ### Features

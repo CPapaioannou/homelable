@@ -27,6 +27,7 @@ import { FloorMapLayer } from './FloorMapLayer'
 import { useAlignmentGuides } from '@/hooks/useAlignmentGuides'
 import { setViewportCenterProjector } from '@/utils/viewportCenter'
 import type { NodeData, EdgeData } from '@/types'
+import { absolutePosition, canReparent } from '@/utils/nodeHierarchy'
 
 interface CanvasContainerProps {
   onConnect?: (connection: Connection) => void
@@ -37,9 +38,10 @@ interface CanvasContainerProps {
   onRequestAddToContainer?: (payload: { nodeIds: string[]; containerId: string }) => void
   onRequestAddToZone?: (payload: { nodeIds: string[]; zoneId: string }) => void
   onOpenInventory?: (deviceId: string) => void
+  onRequestDeleteNodes?: (nodeIds: string[]) => void
 }
 
-export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, onNodeDoubleClick, onNodeDragStart, onRequestAddToGroup, onRequestAddToContainer, onRequestAddToZone, onOpenInventory }: CanvasContainerProps) {
+export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, onNodeDoubleClick, onNodeDragStart, onRequestAddToGroup, onRequestAddToContainer, onRequestAddToZone, onOpenInventory, onRequestDeleteNodes }: CanvasContainerProps) {
   const [lassoMode, setLassoMode] = useState(true)
   const {
     nodes, edges,
@@ -149,10 +151,14 @@ export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, o
     onNodeDoubleClick?.(node)
   }, [onNodeDoubleClick])
 
-  const handleBeforeDelete = useCallback(async () => {
+  const handleBeforeDelete = useCallback(async ({ nodes: deletingNodes = [] }: { nodes?: Node<NodeData>[] } = {}) => {
+    if (deletingNodes.length > 0 && onRequestDeleteNodes) {
+      onRequestDeleteNodes(deletingNodes.map((node) => node.id))
+      return false
+    }
     snapshotHistory()
     return true
-  }, [snapshotHistory])
+  }, [onRequestDeleteNodes, snapshotHistory])
 
   const isValidConnection = useCallback(
     (connection: { source: string | null; target: string | null }) => connection.source !== connection.target,
@@ -169,10 +175,10 @@ export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, o
     // A single drag reports an empty `dragNodes` in some React Flow paths, so
     // fall back to the dragged node itself.
     const dragged = dragNodes && dragNodes.length > 0 ? dragNodes : dragNode ? [dragNode] : []
-    // Groups and zones are containers, never contents.
-    const movable = dragged.filter((n) => n.data.type !== 'group' && n.data.type !== 'groupRect')
+    // Fixed groups and text are outside the hierarchy. Zones may be nested.
+    const movable = dragged.filter((n) => n.data.type !== 'group' && n.data.type !== 'text')
 
-    if (dragNode && dragNode.data.type !== 'group' && dragNode.data.type !== 'groupRect' && movable.length > 0) {
+    if (dragNode && dragNode.data.type !== 'group' && dragNode.data.type !== 'text' && movable.length > 0) {
       const intersecting = getIntersectingNodes(dragNode)
       const zoneParent = dragNode.parentId
         ? nodes.find((n) => n.id === dragNode.parentId && n.data.type === 'groupRect')
@@ -191,31 +197,88 @@ export function CanvasContainer({ onConnect: onConnectProp, onEdgeDoubleClick, o
         // Only free nodes join a new parent; one already nested elsewhere in the
         // selection keeps its own parent.
         const nodeIds = movable.filter((n) => !n.parentId).map((n) => n.id)
-        const group = intersecting.find((n) => n.data.type === 'group')
-        const container = intersecting.find((n) => n.id !== dragNode.id && n.data.container_mode === true)
-        // The destination can be part of the dragged selection (lasso over
-        // everything); it cannot also be one of its own new children.
-        const targetless = (targetId: string) => nodeIds.filter((id) => id !== targetId)
+        // React Flow supplies the live dragged/intersection objects; merge them
+        // with store state so filtering is correct even during a batched render.
+        const hierarchyNodes = [...new Map(
+          [...nodes, ...dragged, ...intersecting].map((node) => [node.id, node]),
+        ).values()]
+        const eligibleFor = (target: Node<NodeData>, allowZones: boolean) =>
+          nodeIds.some((id) => {
+            const child = nodes.find((n) => n.id === id)
+            return canReparent(hierarchyNodes, id, target.id)
+              && (allowZones || child?.data.type !== 'groupRect')
+          })
+        // The intersection list is in canvas order, not depth order. A drop
+        // that reaches a nested container must target the innermost one, so
+        // within a class the deepest eligible candidate wins (ties keep the
+        // earlier list order).
+        const byId = new Map(hierarchyNodes.map((n) => [n.id, n]))
+        // The release point is the intent: a target only counts when its area,
+        // in absolute canvas coordinates, contains the point. A card's slight
+        // overlap with a container never triggers an offer on its own, and
+        // same-level overlaps resolve to whatever the pointer is actually on.
+        const point = event && typeof event.clientX === 'number' && typeof event.clientY === 'number'
+          ? screenToFlowPosition({ x: event.clientX, y: event.clientY })
+          : null
+        const pointIn = (n: Node<NodeData>): boolean => {
+          if (!point) return false
+          const origin = absolutePosition(n, byId)
+          const w = n.width ?? n.measured?.width ?? 200
+          const h = n.height ?? n.measured?.height ?? 80
+          return point.x >= origin.x && point.x <= origin.x + w
+            && point.y >= origin.y && point.y <= origin.y + h
+        }
+        const depthOf = (node: Node<NodeData>): number => {
+          let depth = 0
+          const seen = new Set([node.id])
+          let id = node.parentId
+          while (id && !seen.has(id)) {
+            seen.add(id)
+            depth++
+            id = byId.get(id)?.parentId
+          }
+          return depth
+        }
+        const deepestEligible = (isClass: (n: Node<NodeData>) => boolean, allowZones: boolean) => {
+          let best: Node<NodeData> | undefined
+          let bestDepth = -1
+          for (const candidate of intersecting) {
+            if (!isClass(candidate) || !eligibleFor(candidate, allowZones) || !pointIn(candidate)) continue
+            const depth = depthOf(candidate)
+            if (depth > bestDepth) {
+              best = candidate
+              bestDepth = depth
+            }
+          }
+          return best
+        }
+        const group = deepestEligible((n) => n.data.type === 'group', false)
+        const container = deepestEligible((n) => n.data.container_mode === true, true)
+        const validIds = (targetId: string, allowZones: boolean) => nodeIds.filter((id) => {
+          const child = nodes.find((n) => n.id === id)
+          return canReparent(hierarchyNodes, id, targetId)
+            && (allowZones || child?.data.type !== 'groupRect')
+        })
         if (group) {
-          const ids = targetless(group.id)
+          const ids = validIds(group.id, false)
           if (ids.length > 0) onRequestAddToGroup?.({ nodeIds: ids, groupId: group.id })
         } else if (container) {
           // Any node in container_mode (proxmox, docker_host, …) accepts children.
-          const ids = targetless(container.id)
+          const ids = validIds(container.id, true)
           if (ids.length > 0) onRequestAddToContainer?.({ nodeIds: ids, containerId: container.id })
         } else {
           // Zones come last: they are the loosest container and the largest, so
           // a group/container inside one still wins the drop.
-          const zone = intersecting.find((n) => n.data.type === 'groupRect')
+          const zone = deepestEligible((n) => n.data.type === 'groupRect', true)
           if (zone) {
-            const ids = targetless(zone.id)
+            const ids = validIds(zone.id, true)
             if (ids.length > 0) onRequestAddToZone?.({ nodeIds: ids, zoneId: zone.id })
           }
         }
       }
     }
     onNodeDragStop(event, dragNode, dragNodes)
-  }, [onRequestAddToGroup, onRequestAddToContainer, onRequestAddToZone, removeNodesFromGroup, nodes, getIntersectingNodes, onNodeDragStop])
+  }, [onRequestAddToGroup, onRequestAddToContainer, onRequestAddToZone, removeNodesFromGroup, nodes, getIntersectingNodes, screenToFlowPosition, onNodeDragStop])
 
   return (
     <div ref={wrapperRef} className="w-full h-full" style={{ background: theme.colors.canvasBackground }} onMouseMove={onMouseMove}>

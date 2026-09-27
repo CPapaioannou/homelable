@@ -16,7 +16,17 @@ import { normalizeHandle, removedHandleIds, handleCountField, sideDefault, handl
 import { applyOpacity } from '@/utils/colorUtils'
 import { readHideIp, writeHideIp } from '@/utils/ipDisplay'
 import { isValidCidr, isZoneSubnetCandidate } from '@/utils/subnet'
-import { CONTAINER_MODE_TYPES } from '@/utils/virtualEdgeParent'
+import {
+  absolutePosition,
+  canReparent,
+  isAncestorOf,
+  isHierarchyChild,
+  nodeMap,
+  orderParentsFirst,
+  relationshipParentId,
+  repairHierarchy,
+  visualDescendantIds,
+} from '@/utils/nodeHierarchy'
 import {
   changedFactFields,
   factsBaselineOf,
@@ -28,56 +38,8 @@ import {
 type HistoryEntry = { nodes: Node<NodeData>[]; edges: Edge<EdgeData>[] }
 type Clipboard = { nodes: Node<NodeData>[]; edges: Edge<EdgeData>[] }
 
-/** Resolve a node's effective parent id from either the RF field or domain data. */
-const parentIdOf = (n: Node<NodeData>): string | undefined => n.parentId ?? n.data.parent_id ?? undefined
-
-/**
- * Reorder so every node follows its parent, which is what React Flow needs to
- * resolve nesting — a child listed first renders detached and logs a
- * parent-not-found error. Order is otherwise preserved: a list that is already
- * valid comes back untouched. A parent cycle terminates instead of recursing.
- *
- * This is a topological sort, not a "parentless first, the rest after" split.
- * The split held only while nesting was one level deep; a zone can hold a
- * container, so a container and its own children now sit in the same bucket and
- * the child can land ahead of its parent. React Flow then drops the child's
- * parent binding entirely — no relative position, no `extent: 'parent'` clamp,
- * so it renders detached and drags anywhere (#366 follow-up).
- */
-function orderParentsFirst(nodes: Node<NodeData>[]): Node<NodeData>[] {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
-  const emitted = new Set<string>()
-  const visiting = new Set<string>()
-  const out: Node<NodeData>[] = []
-
-  const visit = (n: Node<NodeData>) => {
-    if (emitted.has(n.id) || visiting.has(n.id)) return
-    visiting.add(n.id)
-    const parent = n.parentId ? byId.get(n.parentId) : undefined
-    if (parent) visit(parent)
-    visiting.delete(n.id)
-    emitted.add(n.id)
-    out.push(n)
-  }
-
-  for (const n of nodes) visit(n)
-  return out
-}
-
-/** True when `maybeAncestorId` sits on `nodeId`'s parent chain. Cycle-safe. */
-function isAncestorOf(nodes: Node<NodeData>[], maybeAncestorId: string, nodeId: string): boolean {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
-  const seen = new Set<string>([nodeId])
-  let current = byId.get(nodeId)
-  while (current) {
-    const pid = parentIdOf(current)
-    if (!pid || seen.has(pid)) return false
-    if (pid === maybeAncestorId) return true
-    seen.add(pid)
-    current = byId.get(pid)
-  }
-  return false
-}
+/** Resolve a node's effective persisted relationship. */
+const parentIdOf = relationshipParentId
 
 /**
  * Re-parent a batch of nodes under one target in a single history entry —
@@ -96,39 +58,56 @@ function nestNodesUnder(
   state: CanvasState,
   targetId: string,
   childIds: string[],
-  opts: { isValidTarget: (n: Node<NodeData>) => boolean; clamp: boolean },
+  opts: {
+    isValidTarget: (n: Node<NodeData>) => boolean
+    isValidChild?: (n: Node<NodeData>) => boolean
+    clamp: boolean
+  },
 ): Partial<CanvasState> | CanvasState {
   const target = state.nodes.find((n) => n.id === targetId)
   if (!target || !opts.isValidTarget(target)) return state
 
+  const byId = nodeMap(state.nodes)
+  const targetAbsolute = absolutePosition(target, byId)
   const batch = new Set(childIds)
   const moving = new Set<string>()
   for (const id of batch) {
     const child = state.nodes.find((n) => n.id === id)
-    if (!child || child.id === targetId) continue
+    if (!child || !canReparent(state.nodes, id, targetId)) continue
+    if (opts.isValidChild && !opts.isValidChild(child)) continue
     const pid = parentIdOf(child)
     if (pid === targetId) continue
     if (pid && batch.has(pid)) continue
-    if (isAncestorOf(state.nodes, child.id, targetId)) continue
     moving.add(id)
   }
   if (moving.size === 0) return state
 
+  let requiredWidth = target.width ?? target.measured?.width ?? 300
+  let requiredHeight = target.height ?? target.measured?.height ?? 200
   const nodes = orderParentsFirst(
     state.nodes.map((n) => {
       if (!moving.has(n.id)) return n
-      // Absolute → target-relative.
-      const x = n.position.x - target.position.x
-      const y = n.position.y - target.position.y
+      const childAbsolute = absolutePosition(n, byId)
+      const x = childAbsolute.x - targetAbsolute.x
+      const y = childAbsolute.y - targetAbsolute.y
+      const position = opts.clamp
+        ? { x: Math.max(8, x), y: Math.max(42, y) }
+        : { x, y }
+      if (opts.clamp && n.data.type === 'groupRect') {
+        requiredWidth = Math.max(requiredWidth, position.x + (n.width ?? n.measured?.width ?? 300) + 16)
+        requiredHeight = Math.max(requiredHeight, position.y + (n.height ?? n.measured?.height ?? 200) + 16)
+      }
       return {
         ...n,
         parentId: targetId,
         extent: opts.clamp ? ('parent' as const) : undefined,
-        position: opts.clamp ? { x: Math.max(8, x), y: Math.max(8, y) } : { x, y },
+        position,
         selected: false,
         data: { ...n.data, parent_id: targetId },
       }
-    }),
+    }).map((n) => n.id === targetId && opts.clamp
+      ? { ...n, width: requiredWidth, height: requiredHeight }
+      : n),
   )
 
   return {
@@ -312,10 +291,11 @@ interface CanvasState {
    */
   setNodeStatus: (id: string, status: Pick<NodeData, 'status' | 'response_time_ms' | 'last_seen'>) => void
   deleteNode: (id: string) => void
+  deleteNodes: (ids: string[], strategy: 'release' | 'cascade') => void
   updateEdge: (id: string, data: Partial<EdgeData>) => void
   reconnectEdge: (id: string, connection: Connection) => void
   deleteEdge: (id: string) => void
-  setProxmoxContainerMode: (proxmoxId: string, enabled: boolean) => void
+  setContainerMode: (nodeId: string, enabled: boolean) => void
   setNodeZIndex: (id: string, zIndex: number) => void
   setNodeSize: (id: string, size: { width?: number; height?: number }) => void
   editingGroupRectId: string | null
@@ -501,6 +481,9 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       const pasted = clip.nodes.map((n) => {
         const root = isRoot(n)
         const newParentId = root ? undefined : idMap.get(parentIdOf(n)!)
+        const copiedParent = newParentId
+          ? clip.nodes.find((candidate) => idMap.get(candidate.id) === newParentId)
+          : undefined
         return {
           ...n,
           id: idMap.get(n.id)!,
@@ -509,7 +492,7 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
             : { ...n.position },
           selected: true,
           parentId: newParentId,
-          extent: newParentId ? ('parent' as const) : undefined,
+          extent: newParentId && copiedParent?.data.type !== 'groupRect' ? ('parent' as const) : undefined,
           data: { ...n.data, parent_id: newParentId },
         }
       })
@@ -606,7 +589,8 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       const parent = node.data.parent_id ? state.nodes.find((n) => n.id === node.data.parent_id) : null
       // A visual group — and a groupRect zone — nests its children just like a
       // container-mode host.
-      const shouldNestInParent = !!(parent?.data.container_mode) || parent?.data.type === 'group' || parent?.data.type === 'groupRect'
+      const shouldNestInParent = isHierarchyChild(node)
+        && (!!(parent?.data.container_mode) || parent?.data.type === 'group' || parent?.data.type === 'groupRect')
       // Zones keep their children free to be dragged back out (see addToZone).
       const nestExtent = parent?.data.type === 'groupRect' ? undefined : ('parent' as const)
       const enriched = node.data.parent_id && shouldNestInParent
@@ -614,10 +598,13 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
             ...node,
             parentId: node.data.parent_id,
             extent: nestExtent,
-            position: {
-              x: Math.max(10, node.position.x - parent.position.x),
-              y: Math.max(10, node.position.y - parent.position.y),
-            },
+            position: (() => {
+              const parentAbsolute = absolutePosition(parent, nodeMap(state.nodes))
+              return {
+                x: node.position.x - parentAbsolute.x,
+                y: node.position.y - parentAbsolute.y,
+              }
+            })(),
           }
         // Not nesting: strip any parentId/extent a caller may have set so a
         // non-container parent can't trap the node in its bounding box.
@@ -640,10 +627,39 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       // acyclic tree, and the row survives a save, so the canvas comes back
       // broken on the next load (#370). Drop the key and apply the rest.
       let data = incoming
-      if (incoming.parent_id === id) {
+      const requestedParent = incoming.parent_id
+        ? state.nodes.find((node) => node.id === incoming.parent_id)
+        : undefined
+      const currentNodeForRole = state.nodes.find((node) => node.id === id)
+      if (
+        incoming.parent_id === id
+        || (incoming.parent_id && isAncestorOf(state.nodes, id, incoming.parent_id))
+        || (requestedParent?.data.type === 'text')
+        || (requestedParent?.data.type === 'group' && currentNodeForRole?.data.type === 'groupRect')
+        || (incoming.parent_id && (currentNodeForRole?.data.type === 'group' || currentNodeForRole?.data.type === 'text'))
+      ) {
         data = { ...incoming }
         delete data.parent_id
       }
+      if (incoming.parent_id && !requestedParent) {
+        data = { ...data }
+        delete data.parent_id
+      }
+      if (
+        (incoming.type === 'group' || incoming.type === 'text')
+        && currentNodeForRole
+        && relationshipParentId(currentNodeForRole)
+      ) {
+        data = { ...data, parent_id: undefined }
+      }
+      if (
+        incoming.type === 'text'
+        && state.nodes.some((node) => relationshipParentId(node) === id)
+      ) {
+        data = { ...data }
+        delete data.type
+      }
+      const beforeById = nodeMap(state.nodes)
       let nodes = state.nodes.map((n) => {
         if (n.id !== id) return n
         const updated: Node<NodeData> = { ...n, data: { ...n.data, ...data } }
@@ -652,34 +668,31 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
         // snaps the container back to auto-fit size and scrambles its nested children (#278).
         // proxmox is always excluded (legacy behavior); the other container types are excluded
         // only while actually in container mode.
-        const isContainerHost = CONTAINER_MODE_TYPES.has(n.data.type) && !!n.data.container_mode
-        if ('properties' in data && n.data.type !== 'proxmox' && n.data.type !== 'groupRect' && n.data.type !== 'group' && !isContainerHost) {
+        const isContainerHost = !!n.data.container_mode
+        if ('properties' in data && n.data.type !== 'groupRect' && n.data.type !== 'group' && !isContainerHost) {
           updated.height = undefined
         }
         if ('parent_id' in data) {
           const newParentId = data.parent_id ?? undefined
+          const nodeAbsolute = absolutePosition(n, beforeById)
           if (!newParentId && n.parentId) {
-            // Detaching from a container: convert position back to absolute canvas coords
-            const parent = state.nodes.find((p) => p.id === n.parentId)
-            if (parent) {
-              updated.position = {
-                x: parent.position.x + n.position.x,
-                y: parent.position.y + n.position.y,
-              }
-            }
+            updated.position = nodeAbsolute
             updated.parentId = undefined
             updated.extent = undefined
           } else if (newParentId && newParentId !== n.parentId) {
             const parent = state.nodes.find((p) => p.id === newParentId)
             if (parent?.data.container_mode || parent?.data.type === 'group' || parent?.data.type === 'groupRect') {
-              // Attaching to a container-mode host, a visual group or a zone.
+              const parentAbsolute = absolutePosition(parent, beforeById)
               updated.parentId = newParentId
               updated.extent = parent.data.type === 'groupRect' ? undefined : ('parent' as const)
-              // Convert absolute position to parent-relative (keep node visible inside)
               updated.position = {
-                x: Math.max(10, n.position.x - parent.position.x),
-                y: Math.max(10, n.position.y - parent.position.y),
+                x: nodeAbsolute.x - parentAbsolute.x,
+                y: nodeAbsolute.y - parentAbsolute.y,
               }
+            } else {
+              updated.parentId = undefined
+              updated.extent = undefined
+              updated.position = nodeAbsolute
             }
           }
         }
@@ -726,39 +739,55 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       return changed ? { nodes } : {}
     }),
 
-  deleteNode: (id) =>
+  deleteNode: (id) => {
+    const node = get().nodes.find((n) => n.id === id)
+    get().deleteNodes([id], node?.data.type === 'groupRect' ? 'release' : 'cascade')
+  },
+
+  deleteNodes: (ids, strategy) =>
     set((state) => {
-      const idsToRemove = new Set<string>()
-      // Deleting a zone deletes the zone, never what it happens to contain:
-      // its children are released back to the canvas in absolute coords.
-      const released: Node<NodeData>[] = []
-      const collect = (nodeId: string) => {
-        idsToRemove.add(nodeId)
-        const node = state.nodes.find((n) => n.id === nodeId)
-        const children = state.nodes.filter((n) => n.parentId === nodeId)
-        if (node?.data.type === 'groupRect') {
-          children.forEach((c) => released.push({
-            ...c,
-            parentId: undefined,
-            extent: undefined,
-            position: {
-              x: node.position.x + c.position.x,
-              y: node.position.y + c.position.y,
-            },
-            data: { ...c.data, parent_id: undefined },
-          }))
-          return
+      const requested = new Set(ids.filter((id) => state.nodes.some((n) => n.id === id)))
+      if (requested.size === 0) return state
+      const idsToRemove = new Set(requested)
+      if (strategy === 'cascade') {
+        for (const id of requested) {
+          for (const descendant of visualDescendantIds(state.nodes, id)) idsToRemove.add(descendant)
         }
-        children.forEach((n) => collect(n.id))
       }
-      collect(id)
-      const releasedById = new Map(released.map((n) => [n.id, n]))
+
+      const byId = nodeMap(state.nodes)
+      const nodes = orderParentsFirst(state.nodes
+        .filter((n) => !idsToRemove.has(n.id))
+        .map((n) => {
+          const parentId = relationshipParentId(n)
+          if (!parentId || !idsToRemove.has(parentId)) return n
+
+          let survivingParentId: string | undefined = byId.get(parentId)?.parentId
+          while (survivingParentId && idsToRemove.has(survivingParentId)) {
+            survivingParentId = byId.get(survivingParentId)?.parentId
+          }
+          const parent = survivingParentId ? byId.get(survivingParentId) : undefined
+          const childAbsolute = absolutePosition(n, byId)
+          const parentAbsolute = parent ? absolutePosition(parent, byId) : { x: 0, y: 0 }
+          return {
+            ...n,
+            parentId: survivingParentId,
+            extent: parent && parent.data.type !== 'groupRect' ? ('parent' as const) : undefined,
+            position: {
+              x: childAbsolute.x - parentAbsolute.x,
+              y: childAbsolute.y - parentAbsolute.y,
+            },
+            data: { ...n.data, parent_id: survivingParentId },
+          }
+        }))
+
       return {
-        nodes: state.nodes
-          .filter((n) => !idsToRemove.has(n.id))
-          .map((n) => releasedById.get(n.id) ?? n),
+        nodes,
         edges: state.edges.filter((e) => !idsToRemove.has(e.source) && !idsToRemove.has(e.target)),
         selectedNodeId: idsToRemove.has(state.selectedNodeId ?? '') ? null : state.selectedNodeId,
+        selectedNodeIds: state.selectedNodeIds.filter((id) => !idsToRemove.has(id)),
+        past: [...state.past.slice(-49), { nodes: state.nodes, edges: state.edges }],
+        future: [],
         hasUnsavedChanges: true,
       }
     }),
@@ -795,57 +824,67 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       hasUnsavedChanges: true,
     })),
 
-  setProxmoxContainerMode: (proxmoxId, enabled) =>
+  setContainerMode: (nodeId, enabled) =>
     set((state) => {
-      const parentNode = state.nodes.find((n) => n.id === proxmoxId)
+      const parentNode = state.nodes.find((n) => n.id === nodeId)
+      if (!parentNode || parentNode.data.type === 'group' || parentNode.data.type === 'groupRect' || parentNode.data.type === 'text') return state
+      const beforeById = nodeMap(state.nodes)
+      const containerAbsolute = absolutePosition(parentNode, beforeById)
+      const outerParentId = parentNode.parentId
+      const outerParent = outerParentId ? beforeById.get(outerParentId) : undefined
+      const outerAbsolute = outerParent ? absolutePosition(outerParent, beforeById) : { x: 0, y: 0 }
       let nodes = state.nodes.map((n) => {
-        if (n.id === proxmoxId) {
+        if (n.id === nodeId) {
           const withMode = { ...n, data: { ...n.data, container_mode: enabled } }
           return enabled
             ? { ...withMode, width: n.width ?? 300, height: n.height ?? 200 }
             : { ...withMode, width: undefined, height: undefined }
         }
-        if (n.data.parent_id === proxmoxId) {
+        if (n.data.parent_id === nodeId) {
           // Idempotency guard: only convert a child's position when its nesting
           // state actually changes. A child that already matches the target mode
           // keeps its position untouched -- re-running the absolute<->relative
           // conversion on an already-relative child corrupts it (children pile
           // into a corner). See handleUpdateNode in App.tsx.
-          const alreadyNested = n.parentId === proxmoxId && n.extent === 'parent'
+          const alreadyNested = n.parentId === nodeId && n.extent === 'parent'
           if (enabled && parentNode) {
             if (alreadyNested) return n
+            const childAbsolute = absolutePosition(n, beforeById)
             return {
               ...n,
-              parentId: proxmoxId,
+              parentId: nodeId,
               extent: 'parent' as const,
               position: {
-                x: Math.max(10, n.position.x - parentNode.position.x),
-                y: Math.max(10, n.position.y - parentNode.position.y),
+                x: Math.max(10, childAbsolute.x - containerAbsolute.x),
+                y: Math.max(42, childAbsolute.y - containerAbsolute.y),
               },
             }
           }
           if (!enabled && parentNode) {
-            if (!n.parentId) return n
+            if (n.parentId !== nodeId) return n
+            const childAbsolute = absolutePosition(n, beforeById)
             return {
               ...n,
-              parentId: undefined,
-              extent: undefined,
+              parentId: outerParentId,
+              extent: outerParent && outerParent.data.type !== 'groupRect' ? ('parent' as const) : undefined,
               position: {
-                x: parentNode.position.x + n.position.x,
-                y: parentNode.position.y + n.position.y,
+                x: childAbsolute.x - outerAbsolute.x,
+                y: childAbsolute.y - outerAbsolute.y,
               },
+              data: { ...n.data, parent_id: outerParentId },
             }
           }
           return enabled
-            ? { ...n, parentId: proxmoxId, extent: 'parent' as const }
-            : { ...n, parentId: undefined, extent: undefined }
+            ? { ...n, parentId: nodeId, extent: 'parent' as const }
+            : n
         }
         return n
       })
-      if (enabled) {
-        nodes = orderParentsFirst(nodes)
+      nodes = orderParentsFirst(nodes)
+      return {
+        nodes,
+        hasUnsavedChanges: true,
       }
-      return { nodes, hasUnsavedChanges: true }
     }),
 
   setNodeZIndex: (id, zIndex) =>
@@ -889,18 +928,30 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       const PADDING_H = 24
       const PADDING_TOP = 48
       const PADDING_BOTTOM = 24
-      const targets = state.nodes.filter((n) => nodeIds.includes(n.id))
+      const selected = new Set(nodeIds)
+      const byId = nodeMap(state.nodes)
+      const targets = state.nodes.filter((n) => {
+        if (!selected.has(n.id) || !isHierarchyChild(n) || n.data.type === 'groupRect') return false
+        let parentId = relationshipParentId(n)
+        while (parentId) {
+          if (selected.has(parentId)) return false
+          const parent = byId.get(parentId)
+          parentId = parent ? relationshipParentId(parent) : undefined
+        }
+        return true
+      })
       if (targets.length === 0) return state
 
       // Bounding box in absolute coordinates
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
       for (const n of targets) {
+        const absolute = absolutePosition(n, byId)
         const w = n.width ?? 200
         const h = n.height ?? 80
-        minX = Math.min(minX, n.position.x)
-        minY = Math.min(minY, n.position.y)
-        maxX = Math.max(maxX, n.position.x + w)
-        maxY = Math.max(maxY, n.position.y + h)
+        minX = Math.min(minX, absolute.x)
+        minY = Math.min(minY, absolute.y)
+        maxX = Math.max(maxX, absolute.x + w)
+        maxY = Math.max(maxY, absolute.y + h)
       }
 
       const groupX = minX - PADDING_H
@@ -927,14 +978,15 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
 
       // Convert children to relative positions and assign parentId
       const updatedNodes = state.nodes.map((n) => {
-        if (!nodeIds.includes(n.id)) return n
+        if (!targets.some((target) => target.id === n.id)) return n
+        const absolute = absolutePosition(n, byId)
         return {
           ...n,
           parentId: groupId,
           extent: 'parent' as const,
           position: {
-            x: n.position.x - groupX,
-            y: n.position.y - groupY,
+            x: absolute.x - groupX,
+            y: absolute.y - groupY,
           },
           selected: false,
           data: { ...n.data, parent_id: groupId },
@@ -942,8 +994,9 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       })
 
       // Group node must come before its children
-      const withoutTargets = updatedNodes.filter((n) => !nodeIds.includes(n.id))
-      const children = updatedNodes.filter((n) => nodeIds.includes(n.id))
+      const targetIds = new Set(targets.map((target) => target.id))
+      const withoutTargets = updatedNodes.filter((n) => !targetIds.has(n.id))
+      const children = updatedNodes.filter((n) => targetIds.has(n.id))
       const nodes = [...withoutTargets, groupNode, ...children]
 
       return {
@@ -999,6 +1052,7 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
     set((state) =>
       nestNodesUnder(state, groupId, childIds, {
         isValidTarget: (n) => n.data.type === 'group',
+        isValidChild: (n) => n.data.type !== 'groupRect',
         clamp: true,
       }),
     ),
@@ -1134,6 +1188,7 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
     set((state) => {
       const group = state.nodes.find((n) => n.id === groupId)
       if (!group) return state
+      const byId = nodeMap(state.nodes)
       const detaching = new Set(
         childIds.filter((id) => state.nodes.some((n) => n.id === id && n.parentId === groupId)),
       )
@@ -1141,14 +1196,12 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
 
       const nodes = state.nodes.map((n) => {
         if (!detaching.has(n.id)) return n
+        const absolute = absolutePosition(n, byId)
         return {
           ...n,
           parentId: undefined,
           extent: undefined,
-          position: {
-            x: n.position.x + group.position.x,
-            y: n.position.y + group.position.y,
-          },
+          position: absolute,
           data: { ...n.data, parent_id: undefined },
         }
       })
@@ -1241,13 +1294,14 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
   requestFloorMapEdit: () => set((s) => ({ floorMapEditNonce: s.floorMapEditNonce + 1 })),
 
   loadCanvas: (nodes, edges) => {
+    const normalized = repairHierarchy(nodes)
     // NOTE: clipboard is intentionally preserved here so nodes copied in one
     // design can be pasted after switching to another design.
     set({
       // React Flow requires parents before children in the array.
-      nodes: orderParentsFirst(nodes),
+      nodes: normalized.nodes,
       edges,
-      hasUnsavedChanges: false,
+      hasUnsavedChanges: normalized.repairs.length > 0,
       selectedNodeId: null,
       past: [],
       future: [],
@@ -1256,7 +1310,7 @@ export const useCanvasStore = create<CanvasState>((rawSet, get) => {
       // the previous one was left at.
       savedViewport: null,
       // What the server just gave us: the reference a save diffs against.
-      factsBaseline: factsBaselines(nodes),
+      factsBaseline: factsBaselines(normalized.nodes),
     })
   },
 
