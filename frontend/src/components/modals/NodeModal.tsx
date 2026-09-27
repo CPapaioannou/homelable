@@ -148,6 +148,21 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
   const set = (key: keyof NodeData, value: unknown) =>
     setForm((f) => ({ ...f, [key]: value }))
 
+  // Which of the device's metrics this node draws. The node only *picks* — the
+  // values themselves live on the device (edited in the device modal). An unset
+  // selection shows everything the device has; an explicit list shows exactly
+  // those keys; an empty list shows nothing.
+  const deviceMetrics = form.metrics ?? []
+  const allMetricKeys = deviceMetrics.map((m) => m.key).filter((k): k is string => k != null)
+  const shownMetricKeys = form.show_metrics ?? allMetricKeys
+  const toggleShowMetric = (key: string) =>
+    setForm((f) => {
+      const eff = f.show_metrics ?? allMetricKeys
+      const next = eff.includes(key) ? eff.filter((k) => k !== key) : [...eff, key]
+      return { ...f, show_metrics: next }
+    })
+  const showNoMetrics = () => setForm((f) => ({ ...f, show_metrics: [] }))
+
   const customStyle = useThemeStore((s) => s.customStyle)
   // Effective default count for a side: the per-type style default if set,
   // otherwise the intrinsic side default (top/bottom → 1, left/right → 0).
@@ -592,6 +607,62 @@ export function NodeModal({ open, onClose, onSubmit, initial, title = 'Add Node'
                     />
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Which of the device's metrics this node draws — the node only picks; the
+                values live on the device itself. Furniture (group/groupRect/
+                text) is excluded: it draws no device, so there is nothing to show. */}
+            {!isFurniture && (
+              <div className="flex flex-col gap-2.5 col-span-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Metrics to show</Label>
+                  {form.show_metrics && form.show_metrics.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={showNoMetrics}
+                      className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Show none
+                    </button>
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground/60">
+                  Pick which of this device's metrics to draw as a bar / figure / chip under the node header.
+                  Values are edited on the device, not here.
+                </span>
+                {deviceMetrics.length === 0 ? (
+                  <span className="text-[10px] text-muted-foreground/60">
+                    This device has no metrics yet — add them in the device editor.
+                  </span>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {deviceMetrics.map((m, i) => {
+                      const key = m.key
+                      const showable = key != null
+                      const checked = showable && shownMetricKeys.includes(key as string)
+                      return (
+                        <label
+                          key={key ?? i}
+                          className={`flex items-center gap-2 rounded-md border border-[#30363d] px-2 py-1.5 ${showable ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={!showable}
+                            checked={checked}
+                            onChange={() => key != null && toggleShowMetric(key)}
+                            className="h-3.5 w-3.5 accent-[#00d4ff]"
+                          />
+                          <span className="text-xs">{m.label || '(unnamed)'}</span>
+                          <span className="ml-auto font-mono text-[9px] text-muted-foreground/60">
+                            {m.kind ?? 'range'}
+                            {m.unit ? ` · ${m.unit}` : ''}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

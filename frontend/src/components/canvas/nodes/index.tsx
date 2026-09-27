@@ -38,6 +38,7 @@ export const CplNode      = (props: N) => <BaseNode {...props} icon={PlugZap} />
 export const DockerHostNode      = (props: N) => <BaseNode {...props} icon={Anchor} />
 export const DockerContainerNode = (props: N) => <BaseNode {...props} icon={Package} />
 export const GenericNode  = (props: N) => <BaseNode {...props} icon={Circle} />
+export const DriveNode    = (props: N) => <BaseNode {...props} icon={HardDrive} />
 // Zigbee node types
 export const ZigbeeCoordinatorNode = (props: N) => <BaseNode {...props} icon={Network} />
 export const ZigbeeRouterNode      = (props: N) => <BaseNode {...props} icon={Radio} />

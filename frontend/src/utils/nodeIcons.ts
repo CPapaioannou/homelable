@@ -202,6 +202,7 @@ export const NODE_TYPE_DEFAULT_ICONS: Record<NodeType, LucideIcon> = {
   meter:             Gauge,
   transformer:       CircleDot,
   load:              Circle,
+  drive:             HardDrive,
 }
 
 /** Resolve the display icon for a node — custom_icon takes priority over type default.

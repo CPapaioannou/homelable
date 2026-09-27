@@ -306,4 +306,18 @@ describe('BaseNode — legacy hardware fallback', () => {
     })
     expect(screen.queryByText('Intel Xeon E5-2680')).toBeNull()
   })
+
+  it('renders the utilization bar when the node carries a metric', () => {
+    const { container } = renderBaseNode({
+      metrics: [{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }],
+    })
+    expect(screen.getByRole('progressbar')).toBeDefined()
+    expect(container.querySelector('[role="progressbar"] div')).toBeTruthy()
+    expect(screen.getByText('Storage: 512 / 1000 GB (51%)')).toBeDefined()
+  })
+
+  it('renders no utilization bar when the node has no metric', () => {
+    renderBaseNode({})
+    expect(screen.queryByRole('progressbar')).toBeNull()
+  })
 })

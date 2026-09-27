@@ -67,6 +67,51 @@ describe('parseYamlToCanvas', () => {
     expect(d.disk_gb).toBe(2000)
   })
 
+  it('restores utilization metrics', () => {
+    const yaml = `
+- nodeType: drive
+  label: "SSD 1"
+  metrics:
+    - label: "Storage"
+      used: 512
+      total: 1000
+      unit: "GB"
+`
+    const { nodes } = parseYamlToCanvas(yaml, empty, emptyEdges)
+    expect(nodes[0].data.metrics).toEqual([{ label: 'Storage', used: 512, total: 1000, unit: 'GB' }])
+  })
+
+  it('restores the node-local showMetrics selection', () => {
+    const yaml = `
+- nodeType: drive
+  label: "SSD 1"
+  metrics:
+    - key: "capacity"
+      label: "Storage"
+      used: 512
+      total: 1000
+      unit: "GB"
+  showMetrics:
+    - "capacity"
+`
+    const { nodes } = parseYamlToCanvas(yaml, empty, emptyEdges)
+    expect(nodes[0].data.show_metrics).toEqual(['capacity'])
+  })
+
+  it('round-trips metrics through export then import', () => {
+    const source: Node<NodeData>[] = [
+      {
+        id: '1',
+        type: 'drive',
+        position: { x: 0, y: 0 },
+        data: { label: 'SSD 1', type: 'drive', status: 'unknown', services: [], metrics: [{ label: 'Storage', used: 90, total: 100, unit: '%' }] },
+      },
+    ]
+    const yaml = exportCanvasToYaml(source, [])
+    const { nodes } = parseYamlToCanvas(yaml, empty, emptyEdges)
+    expect(nodes[0].data.metrics).toEqual([{ label: 'Storage', used: 90, total: 100, unit: '%' }])
+  })
+
   // A node draws its `properties`; the hardware fields are inventory data. An
   // import that set `show_hardware` alone showed the specs until the first
   // save, then lost them — so the specs arrive as properties instead.

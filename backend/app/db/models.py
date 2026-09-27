@@ -58,6 +58,13 @@ class Node(Base):
     # NULL only for canvas furniture and for a node with no inventory row yet;
     # `inventory_sync.link_facts` fills both lists as soon as there is one.
     display_view: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Which of the device's utilisation metrics this node draws — a list of the
+    # metric *keys* it shows (e.g. ["capacity", "cpu"]). The node only decides
+    # what to display; the values themselves are a device fact on the inventory
+    # row (`device_inventory.metrics`) that an agent owns, so this stays node
+    # presentation. NULL for canvas furniture, [] for a device node that shows
+    # nothing yet.
+    show_metrics: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     pos_x: Mapped[float] = mapped_column(Float, default=0)
     pos_y: Mapped[float] = mapped_column(Float, default=0)
     parent_id: Mapped[str | None] = mapped_column(String, ForeignKey("nodes.id", ondelete="CASCADE"))
@@ -251,6 +258,14 @@ class InventoryDevice(Base):
     # VMID). Generic NodeProperty shape {key,value,icon,visible}; merged into the
     # Node's properties on approve. Empty for scan/mesh sources that don't set it.
     properties: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    # Utilisation gauges the device wears, one entry per gauge: each is
+    # {key, label, used, total, unit}. `key` is a stable machine id ("cpu",
+    # "ram", "disk", …) an agent targets when it refreshes a reading; `label`
+    # is the human name the UI prints. A list rather than a single gauge so a
+    # device can show CPU *and* RAM *and* disk at once. A device fact — the row
+    # owns it, so every canvas drawing the device shows the same gauges and an
+    # agent writes one place. Empty for a device with no gauges.
+    metrics: Mapped[list[Any]] = mapped_column(JSON, default=list)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     # --- Curated device facts (3.3.0) -------------------------------------

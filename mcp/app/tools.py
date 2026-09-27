@@ -17,7 +17,7 @@ NODE_TYPES = [
     "generic", "zigbee_coordinator", "zigbee_router", "zigbee_enddevice",
     "zwave_coordinator", "zwave_router", "zwave_enddevice", "grid", "ups", "battery", "generator",
     "solar_panel", "inverter", "circuit_breaker", "contactor", "electrical_switch", "socket",
-    "light", "meter", "transformer", "load",
+    "light", "meter", "transformer", "load", "drive",
 ]
 
 # Kept in sync manually with frontend/src/types/index.ts EdgeType.

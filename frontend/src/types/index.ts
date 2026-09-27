@@ -71,6 +71,7 @@ export type NodeType =
   | 'meter'
   | 'transformer'
   | 'load'
+  | 'drive'
 
 export type TextPosition =
   | 'top-left'
@@ -118,6 +119,38 @@ export interface NodeProperty {
 }
 
 /**
+ * A generic utilisation gauge a node card can draw — storage used/total on a
+ * drive, CPU or RAM on a host, or any other used-vs-total quantity. The bar
+ * fills to `used / total`; a percentage gauge simply uses `total: 100`.
+ * Presentation only (like `custom_colors`): the same device drawn on two
+ * canvases may carry two different gauges.
+ */
+export interface UtilizationMetric {
+  /** Stable machine id the agent targets when it updates this metric. */
+  key?: string
+  label: string
+  /**
+   * Open string, not a closed enum: "range" (used/total), "value" (a single
+   * figure), "status" (ok/warn/crit or text), or anything new. The renderer
+   * falls back on the fields present, so an unknown kind still draws.
+   */
+  kind?: string
+  unit?: string
+  /** kind "range": the used portion. */
+  used?: number
+  /** kind "range": the total. */
+  total?: number
+  /** kind "value": a single figure; kind "status": ok/warn/crit or text. */
+  value?: number | string
+  /** Amber threshold — a percentage for "range", an absolute value otherwise. Default 70. */
+  warn_at?: number
+  /** Red threshold — a percentage for "range", an absolute value otherwise. Default 90. */
+  crit_at?: number
+  /** When the value was last updated (agent staleness). */
+  updated_at?: string
+}
+
+/**
  * A Device Inventory row, as `/scan/pending` returns it.
  *
  * The inventory row — not the canvas node — owns what a device *is*: its
@@ -150,6 +183,8 @@ export interface InventoryEntry {
   vendor?: string | null
   lqi?: number | null
   properties?: NodeProperty[]
+  /** Generic utilisation gauges the device wears, updated by the agent. */
+  metrics?: UtilizationMetric[]
   discovered_at: string
   /** Curated facts, editable from the device detail modal. */
   label?: string | null
@@ -230,6 +265,18 @@ export interface NodeData extends Record<string, unknown> {
   properties?: NodeProperty[]
   parent_id?: string
   container_mode?: boolean
+  /**
+   * The linked device's utilisation metrics (device fact, hydrated from the
+   * inventory row). This is the data the node looks up when drawing — the node
+   * never owns the values, an agent does.
+   */
+  metrics?: UtilizationMetric[]
+  /**
+   * Which of the device's metric keys this node draws — node presentation only.
+   * The renderer looks each key up in `metrics` and draws it. Empty/absent =
+   * nothing shown.
+   */
+  show_metrics?: string[]
   custom_colors?: {
     border?: string
     background?: string
@@ -352,6 +399,7 @@ export const NODE_TYPE_LABELS: Record<NodeType, string> = {
   meter: 'Energy Meter',
   transformer: 'Transformer',
   load: 'Electrical Load',
+  drive: 'Drive',
 }
 
 export const STATUS_COLORS: Record<NodeStatus, string> = {

@@ -274,6 +274,66 @@ def block_properties(device: Any, **_: Any) -> str:
     return "\n".join(lines)
 
 
+def _to_number(value: Any) -> float | None:
+    """A JSON number as a float, else None. Booleans are not measurements."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def _utilization_line(metric: Any) -> str | None:
+    """One document line for a single device metric, or ``None`` when nothing is measurable.
+
+    The shape is open — decided by the fields present rather than a closed kind
+    enum, so a new metric shape renders here without a code change. A range
+    (``used``/``total``) prints ``used / total unit (pct%)``; a string ``value``
+    is a status and prints as-is; a numeric ``value`` is a single figure. Raw
+    values print as given (an integer 8 stays "8", not "8.0"); only the
+    percentage is derived from their numeric form.
+    """
+    if not isinstance(metric, dict):
+        return None
+    label = str(metric.get("label") or metric.get("key") or "Metric")
+    unit = str(metric.get("unit") or "").strip()
+    suffix = f" {unit}" if unit else ""
+
+    used_raw = metric.get("used")
+    total_raw = metric.get("total")
+    value_raw = metric.get("value")
+    used_f = _to_number(used_raw)
+    total_f = _to_number(total_raw)
+
+    # Range: used / total, with a percentage when both are measurable.
+    if used_f is not None or total_f is not None:
+        if total_f is None or total_f == 0.0:
+            return f"- **{label}** — {used_raw} / {total_raw}{suffix}"
+        pct = round(used_f / total_f * 100) if used_f is not None else None
+        value = f"{used_raw} / {total_raw}{suffix}" + (f" ({pct}%)" if pct is not None else "")
+        return f"- **{label}** — {value}"
+
+    # Status: a string state (ok / warn / crit or free text).
+    if isinstance(value_raw, str) and value_raw.strip():
+        return f"- **{label}** — {value_raw.strip()}{suffix}"
+
+    # Value: a single measurable figure.
+    if _to_number(value_raw) is not None:
+        return f"- **{label}** — {value_raw}{suffix}"
+
+    return None  # nothing measurable — skip the metric rather than print "None"
+
+
+def block_utilization(device: Any, *, metrics: list[Any] | None = None, **_: Any) -> str:
+    """The utilisation gauges a device wears (a drive's storage, a host's CPU/RAM).
+
+    Metrics are a device fact now — ``device_inventory.metrics`` — a keyed list of
+    gauges, so one line per gauge in the device's own order. Empty when there is
+    nothing to show, which drops the whole section from the document.
+    """
+    lines = [line for line in (_utilization_line(m) for m in metrics or []) if line]
+    return "\n".join(lines)
+
+
+
 def block_rack(device: Any, *, rack: dict[str, Any] | None = None, zone_label: str | None = None, **_: Any) -> str:
     parts: list[str] = []
     if rack and rack.get("name"):
@@ -323,6 +383,7 @@ BLOCKS: dict[str, Callable[..., str]] = {
     "hardware": block_hardware,
     "services": block_services,
     "properties": block_properties,
+    "utilization": block_utilization,
     "rack": block_rack,
     "network": block_network,
 }
@@ -403,6 +464,7 @@ def render_device_document(
     zone_label: str | None = None,
     rack: dict[str, Any] | None = None,
     connections: list[str] | None = None,
+    metrics: list[Any] | None = None,
     today: date | None = None,
 ) -> str:
     """The full skeleton for a device, old notes appended verbatim."""
@@ -440,6 +502,10 @@ def render_device_document(
         block_hardware(device),
         "",
     ]
+
+    utilization = block_utilization(device, metrics=metrics)
+    if utilization:
+        parts += ["### Utilization", "", utilization, ""]
 
     location = block_rack(device, rack=rack, zone_label=zone_label)
     if location:

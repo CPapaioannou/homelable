@@ -41,4 +41,22 @@ export interface YamlNode {
   containerMode?: boolean
   width?: number
   height?: number
+  // Generic utilisation metrics the linked device carries (device fact).
+  // Open shape: kind is a free string; range uses used/total, value a single
+  // figure, status a state. Only written when present so a node without
+  // metrics round-trips unchanged.
+  metrics?: {
+    key?: string
+    label: string
+    kind?: string
+    unit?: string
+    used?: number
+    total?: number
+    value?: number | string
+    warn_at?: number
+    crit_at?: number
+    updated_at?: string
+  }[]
+  // Which of the device's metric keys this node draws (node presentation).
+  showMetrics?: string[]
 }

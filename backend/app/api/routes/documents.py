@@ -140,7 +140,13 @@ async def _device_context(db: AsyncSession, device_id: str) -> dict[str, Any]:
     All three are optional: a device may be on no canvas, in no rack and in no
     zone, and the template drops those sections rather than printing them empty.
     """
-    context: dict[str, Any] = {"zone_label": None, "rack": None, "connections": []}
+    context: dict[str, Any] = {"zone_label": None, "rack": None, "connections": [], "metrics": []}
+
+    # Metrics are a device fact — the gauges the device wears live on the inventory
+    # row, not on the node that draws it.
+    device = await db.get(InventoryDevice, device_id)
+    if device is not None:
+        context["metrics"] = list(device.metrics or [])
 
     node = (
         await db.execute(select(Node).where(Node.device_id == device_id).order_by(Node.created_at))
@@ -349,7 +355,7 @@ async def generated_block(
     device = await db.get(InventoryDevice, device_id)
     if not device:
         raise HTTPException(404, "Device not found")
-    context = await _device_context(db, device_id) if block in {"rack", "network"} else {}
+    context = await _device_context(db, device_id) if block in {"rack", "network", "utilization"} else {}
     return {"block": block, "markdown": render_block(block, device, **context)}
 
 

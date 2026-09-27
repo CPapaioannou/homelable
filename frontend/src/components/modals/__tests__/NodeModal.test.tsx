@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { NodeModal } from '../NodeModal'
-import type { NodeData } from '@/types'
+import type { NodeData, UtilizationMetric } from '@/types'
 
 // ── Mock Shadcn Select with native <select> for testability ───────────────
 
@@ -624,5 +624,57 @@ describe('NodeModal', () => {
   it('seeds the field from an existing group description', () => {
     renderModal({ initial: { type: 'group', label: 'Cluster', description: 'Three boxes.', services: [] } })
     expect((screen.getByPlaceholderText('What this is for') as HTMLTextAreaElement).value).toBe('Three boxes.')
+  })
+})
+
+// ── Metrics picker (which of the device's metrics this node draws) ─────────
+
+const CPU_METRIC: UtilizationMetric = { key: 'cpu', label: 'CPU', kind: 'range', used: 60, total: 100, unit: '%' }
+const RAM_METRIC: UtilizationMetric = { key: 'ram', label: 'RAM', kind: 'range', used: 8, total: 16, unit: 'GB' }
+
+describe('NodeModal — metrics picker', () => {
+  it('shows the section for a device type', () => {
+    renderModal({ initial: BASE })
+    expect(screen.getByText('Metrics to show')).toBeDefined()
+  })
+
+  it('hides the section for canvas furniture', () => {
+    renderModal({ initial: { type: 'groupRect', label: 'Garage', services: [] } })
+    expect(screen.queryByText('Metrics to show')).toBeNull()
+  })
+
+  it('shows a hint when the device has no metrics', () => {
+    renderModal({ initial: BASE })
+    expect(screen.getByText(/no metrics yet/)).toBeDefined()
+  })
+
+  it('shows a device metric by default (uncurated = show all) and can hide it', () => {
+    const { onSubmit } = renderModal({ initial: { ...BASE, metrics: [CPU_METRIC] } })
+    const box = screen.getByLabelText(/CPU/) as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box) // uncheck the only metric -> show none
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    expect((onSubmit.mock.calls[0][0] as Partial<NodeData>).show_metrics).toEqual([])
+  })
+
+  it('round-trips an explicit selection, checking only the chosen keys', () => {
+    const { onSubmit } = renderModal({
+      initial: { ...BASE, metrics: [CPU_METRIC, RAM_METRIC], show_metrics: ['cpu'] },
+    })
+    expect((screen.getByLabelText(/CPU/) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText(/RAM/) as HTMLInputElement).checked).toBe(false)
+    // Re-check RAM -> both are shown.
+    fireEvent.click(screen.getByLabelText(/RAM/) as HTMLInputElement)
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    expect((onSubmit.mock.calls[0][0] as Partial<NodeData>).show_metrics).toEqual(['cpu', 'ram'])
+  })
+
+  it('hides everything through the Show none button', () => {
+    const { onSubmit } = renderModal({
+      initial: { ...BASE, metrics: [CPU_METRIC, RAM_METRIC], show_metrics: ['cpu'] },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Show none' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    expect((onSubmit.mock.calls[0][0] as Partial<NodeData>).show_metrics).toEqual([])
   })
 })

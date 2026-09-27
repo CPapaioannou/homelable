@@ -31,6 +31,10 @@ class InventoryDeviceResponse(BaseModel):
     # Display properties carried from discovery (e.g. Proxmox specs). Merged into
     # the node on approve; empty for scan/mesh sources that don't set them.
     properties: list[Any] = []
+    # Keyed utilisation metrics owned by this device (agent- or user-fed); each
+    # is {key, label, kind, unit?, used?, total?, value?, warn_at?, crit_at?,
+    # updated_at?}. A canvas node picks which of these to draw.
+    metrics: list[Any] = []
     discovered_at: datetime
     # Curated device facts (3.3.0). `label`/`type` supersede friendly_name/
     # suggested_type once the user has named the device; the older pair stays for
@@ -77,7 +81,7 @@ class InventoryDeviceResponse(BaseModel):
         """NULL on every row written before the column existed."""
         return v if isinstance(v, list) else []
 
-    @field_validator("properties", "discovery_sources", "services", mode="before")
+    @field_validator("properties", "discovery_sources", "services", "metrics", mode="before")
     @classmethod
     def _coerce_list(cls, v: Any) -> list[Any]:
         # Legacy rows (columns added by migration) have these = NULL.
@@ -170,6 +174,7 @@ class InventoryDeviceUpdate(BaseModel):
     vendor: str | None = None
     services: list[Any] | None = None
     properties: list[Any] | None = None
+    metrics: list[Any] | None = None
     notes: str | None = None
     cpu_count: int | None = None
     cpu_model: str | None = None

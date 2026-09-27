@@ -29,6 +29,8 @@ export interface ApiNode extends Record<string, unknown> {
   container_mode?: boolean
   custom_colors?: Record<string, unknown> | null
   custom_icon?: string | null
+  metrics?: Record<string, unknown>[]
+  show_metrics?: string[]
   cpu_count?: number | null
   cpu_model?: string | null
   ram_gb?: number | null
@@ -104,6 +106,10 @@ export function serializeNode(
       parent_id: n.data.parent_id ?? null,
       container_mode: false,
       custom_icon: null,
+      // Furniture never carries gauges; sent explicitly because a canvas save
+      // replaces every node column, and omitting it would read as a clear.
+      metrics: [],
+      show_metrics: [],
       pos_x: n.position.x,
       pos_y: n.position.y,
       // A zone's size goes in the real columns, like every other node type.
@@ -152,6 +158,8 @@ export function serializeNode(
       ? { ...(n.data.custom_colors ?? {}), collapsed: n.data.collapsed }
       : (n.data.custom_colors ?? null),
     custom_icon: n.data.custom_icon ?? null,
+    metrics: n.data.metrics ?? [],
+    show_metrics: n.data.show_metrics ?? [],
     cpu_count: n.data.cpu_count ?? null,
     cpu_model: n.data.cpu_model ?? null,
     ram_gb: n.data.ram_gb ?? null,

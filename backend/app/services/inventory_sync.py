@@ -623,6 +623,38 @@ def merge_services(
     return out
 
 
+def merge_metrics(base: list[Any] | None, incoming: list[Any] | None) -> list[Any]:
+    """Union two gauge lists on ``key``; incoming wins.
+
+    Metrics are a device fact — an agent writes them and a canvas echoes them
+    back on save — so a non-replacing merge must never lose a gauge the row
+    holds. Order-stable like :func:`merge_properties`: existing keys keep their
+    position and new ones are appended. A blank incoming value never clears an
+    established one, so a partial gauge cannot zero out a reading.
+    """
+    out: list[Any] = [dict(m) if isinstance(m, dict) else m for m in (base or [])]
+    index: dict[str, int] = {}
+    for i, item in enumerate(out):
+        if isinstance(item, dict) and item.get("key") is not None:
+            index[str(item["key"])] = i
+    for item in incoming or []:
+        if not isinstance(item, dict) or item.get("key") is None:
+            if item not in out:
+                out.append(item)
+            continue
+        key = str(item["key"])
+        pos = index.get(key)
+        if pos is None:
+            out.append(dict(item))
+            index[key] = len(out) - 1
+            continue
+        if isinstance(out[pos], dict):
+            out[pos] = {**out[pos], **{k: v for k, v in item.items() if not _blank(v)}}
+        else:
+            out[pos] = dict(item)
+    return out
+
+
 # Observations rather than edits: the checker and the scanner write these, so a
 # client never lists them as changed and they survive a `changed_fields` filter.
 _LIVE_FACT_FIELDS = frozenset({"status", "last_seen", "last_scan", "response_time_ms"})
@@ -661,6 +693,8 @@ def changed_facts(device: InventoryDevice, facts: Mapping[str, Any]) -> dict[str
         out["properties"] = facts["properties"]
     if "services" in facts and list(facts["services"] or []) != list(device.services or []):
         out["services"] = facts["services"]
+    if "metrics" in facts and list(facts["metrics"] or []) != list(device.metrics or []):
+        out["metrics"] = facts["metrics"]
 
     # Live observations, not edits: carried through only where the merge would
     # have used them — filling a row that has never been checked.
@@ -722,6 +756,10 @@ def merge_facts_into_device(
         device.services = list(facts["services"] or [])
     else:
         device.services = merge_services(device.services, facts.get("services"))
+    if replace_lists and "metrics" in facts:
+        device.metrics = list(facts["metrics"] or [])
+    else:
+        device.metrics = merge_metrics(device.metrics, facts.get("metrics"))
 
     # Live status: keep the freshest observation rather than the last writer.
     last_seen, status, last_scan = facts.get("last_seen"), facts.get("status"), facts.get("last_scan")
@@ -751,6 +789,7 @@ def device_from_facts(facts: Mapping[str, Any]) -> InventoryDevice:
         ieee_address=facts.get("ieee_address"),
         services=list(facts.get("services") or []),
         properties=list(facts.get("properties") or []),
+        metrics=list(facts.get("metrics") or []),
         notes=facts.get("notes"),
         cpu_count=facts.get("cpu_count"),
         cpu_model=facts.get("cpu_model"),
@@ -882,7 +921,7 @@ _SHARED_FIELDS = ("label", "type")
 
 # Everything the inventory row owns, as it appears in a node payload.
 DEVICE_FACT_FIELDS = (
-    *DEVICE_SCALARS, "services", "properties", "show_hardware", "status", *_SHARED_FIELDS,
+    *DEVICE_SCALARS, "services", "properties", "metrics", "show_hardware", "status", *_SHARED_FIELDS,
 )
 
 
@@ -902,7 +941,7 @@ def facts_from_payload(payload: Mapping[str, Any], *, label: str, node_type: str
     """
     facts: dict[str, Any] = {
         field: payload.get(field)
-        for field in (*DEVICE_SCALARS, "services", "properties", "show_hardware", "status")
+        for field in (*DEVICE_SCALARS, "services", "properties", "metrics", "show_hardware", "status")
     }
     facts["label"] = label
     facts["type"] = node_type
@@ -933,6 +972,9 @@ def hydrated_node(node: Node, device: InventoryDevice | None) -> dict[str, Any]:
     # An implementation detail of the split, not part of the wire shape: the
     # view is reported *through* the services and properties it orders.
     view = payload.pop("display_view", None) or {}
+    # A list on the wire, never null: furniture and pre-migration rows store
+    # NULL, and the response schema will not accept it.
+    payload["show_metrics"] = list(payload.get("show_metrics") or [])
     if device is None:
         return payload
 
@@ -942,6 +984,7 @@ def hydrated_node(node: Node, device: InventoryDevice | None) -> dict[str, Any]:
     payload["type"] = device.type or node.type
     payload["services"] = apply_view(device.services, view.get("services"), "services")
     payload["properties"] = apply_view(device.properties, view.get("properties"), "properties")
+    payload["metrics"] = list(device.metrics or [])
     payload["show_hardware"] = bool(device.show_hardware)
     payload["ieee_address"] = device.ieee_address
     payload["status"] = device.status_live or "unknown"

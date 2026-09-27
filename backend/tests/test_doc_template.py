@@ -189,6 +189,99 @@ def test_property_map_keeps_the_first_of_a_repeated_key():
     assert t.property_map(device)["ram"] == "first"
 
 
+# ── the utilisation gauge ─────────────────────────────────────────────────────
+
+def test_utilization_block_prints_used_over_total_with_percent():
+    md = t.block_utilization(_device(), metrics=[{"label": "Storage", "used": 512, "total": 1000, "unit": "GB"}])
+    assert "**Storage**" in md
+    assert "512 / 1000 GB (51%)" in md
+
+
+def test_utilization_block_rounds_the_percent():
+    md = t.block_utilization(_device(), metrics=[{"label": "CPU", "used": 63, "total": 100, "unit": "%"}])
+    assert "63 / 100 % (63%)" in md
+
+
+def test_utilization_block_omits_the_percent_when_the_total_is_zero():
+    md = t.block_utilization(_device(), metrics=[{"label": "RAM", "used": 8, "total": 0, "unit": "GB"}])
+    assert "8 / 0 GB" in md
+    assert "(0%)" not in md
+
+
+def test_utilization_block_prints_one_line_per_gauge():
+    md = t.block_utilization(
+        _device(),
+        metrics=[
+            {"label": "CPU", "used": 63, "total": 100, "unit": "%"},
+            {"label": "RAM", "used": 8, "total": 16, "unit": "GB"},
+            {"label": "Storage", "used": 512, "total": 1000, "unit": "GB"},
+        ],
+    )
+    assert md.count("- **") == 3
+    assert "**CPU**" in md and "**RAM**" in md and "**Storage**" in md
+    assert "63 / 100 % (63%)" in md and "8 / 16 GB (50%)" in md and "512 / 1000 GB (51%)" in md
+
+
+def test_utilization_block_is_empty_without_metrics():
+    assert t.block_utilization(_device()) == ""
+    assert t.block_utilization(_device(), metrics=[]) == ""
+
+
+def test_utilization_block_drops_a_malformed_metric():
+    assert t.block_utilization(_device(), metrics=[{"label": "X"}]) == ""
+
+
+def test_utilization_block_prints_a_single_value_figure():
+    md = t.block_utilization(_device(), metrics=[{"label": "CPU", "value": 78, "unit": "%"}])
+    assert "**CPU**" in md
+    assert "78 %" in md
+    # A plain figure has no derived percentage.
+    assert "(" not in md
+
+
+def test_utilization_block_prints_a_status_value():
+    md = t.block_utilization(_device(), metrics=[{"label": "SMART", "value": "ok"}])
+    assert "**SMART** — ok" in md
+
+
+def test_utilization_block_uses_the_key_as_a_label_fallback():
+    md = t.block_utilization(_device(), metrics=[{"key": "disk", "used": 1, "total": 2, "unit": "TB"}])
+    assert "**disk**" in md
+    assert "1 / 2 TB (50%)" in md
+
+
+def test_utilization_block_handles_a_mixed_metric_list():
+    md = t.block_utilization(
+        _device(),
+        metrics=[
+            {"label": "Storage", "used": 512, "total": 1000, "unit": "GB"},
+            {"label": "CPU", "value": 63, "unit": "%"},
+            {"label": "SMART", "value": "ok"},
+        ],
+    )
+    assert md.count("- **") == 3
+    assert "512 / 1000 GB (51%)" in md and "63 %" in md and "**SMART** — ok" in md
+
+
+def test_utilization_block_skips_a_metric_with_no_measurable_fields():
+    # An open shape with none of used/total/value is not measurable — dropped.
+    assert t.block_utilization(_device(), metrics=[{"label": "X", "kind": "weird"}]) == ""
+
+
+def test_device_document_includes_utilization_when_metrics_are_set():
+    doc = t.render_device_document(
+        _device(),
+        metrics=[{"label": "Storage", "used": 512, "total": 1000, "unit": "GB"}],
+    )
+    assert "### Utilization" in doc
+    assert "512 / 1000 GB (51%)" in doc
+
+
+def test_device_document_omits_utilization_without_metrics():
+    doc = t.render_device_document(_device())
+    assert "### Utilization" not in doc
+
+
 # ── the snapshot follows what the tables print ──────────────────────────────
 
 

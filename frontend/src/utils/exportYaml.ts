@@ -99,6 +99,12 @@ export function exportCanvasToYaml(nodes: Node<NodeData>[], edges: Edge<EdgeData
     // Preserve the port-number toggle so it survives a round-trip (issue #272).
     if (d.show_port_numbers) entry.showPortNumbers = true
 
+    // Generic utilisation metrics (a device fact), so a drive's storage bars (or
+    // any used/total quantities) survive a YAML round-trip.
+    if (d.metrics?.length) entry.metrics = d.metrics
+    // Which of the device's metric keys this node draws (node presentation).
+    if (d.show_metrics?.length) entry.showMetrics = d.show_metrics
+
     // Parent relationship: if this node has a parentId in React Flow,
     // encode it as a 'parent' connection using any virtual edge between them.
     const parentId = node.data.parent_id ?? node.parentId

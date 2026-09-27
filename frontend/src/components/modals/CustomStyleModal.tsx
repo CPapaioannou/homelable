@@ -32,6 +32,7 @@ const NODE_TYPE_GROUPS: { label: string; types: NodeType[] }[] = [
   { label: 'Zigbee',         types: ['zigbee_coordinator', 'zigbee_router', 'zigbee_enddevice'] },
   { label: 'Z-Wave',         types: ['zwave_coordinator', 'zwave_router', 'zwave_enddevice'] },
   { label: 'Personal',       types: ['computer', 'laptop', 'mobile'] },
+  { label: 'Storage',        types: ['drive'] },
   { label: 'Generic',        types: ['generic'] },
 ]
 
@@ -41,6 +42,7 @@ const NODE_ICONS: Record<string, LucideIcon> = {
   isp: Globe, router: Router, firewall: Flame, switch: Network, server: Server, proxmox: Layers,
   vm: Box, lxc: Container, nas: HardDrive, iot: Cpu, ap: Wifi,
   camera: Camera, printer: Printer, computer: Monitor, laptop: Laptop, mobile: Smartphone, cpl: PlugZap,
+  drive: HardDrive,
   docker_host: Anchor, docker_container: Package,
   zigbee_coordinator: Radio, zigbee_router: Zap, zigbee_enddevice: Lightbulb,
   zwave_coordinator: RadioTower, zwave_router: Share2, zwave_enddevice: Lightbulb,

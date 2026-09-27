@@ -58,7 +58,7 @@ import { DEVICE_TYPE_GROUPS } from '@/utils/nodeTypeGroups'
 import { formatRelative, formatTimestamp } from '@/utils/timeFormat'
 import { countPorts } from '@/utils/portSpec'
 import { serviceToForm, type ServiceFormData, type ServiceSubmitData } from '@/utils/serviceForm'
-import { NODE_TYPE_LABELS, type CheckMethod, type DeviceStatus, type InventoryEntry, type NodeProperty, type NodeType, type ServiceInfo } from '@/types'
+import { NODE_TYPE_LABELS, type CheckMethod, type DeviceStatus, type InventoryEntry, type NodeProperty, type NodeType, type ServiceInfo, type UtilizationMetric } from '@/types'
 import modalStyles from './modal-interactive.module.css'
 
 // Home is `@/types` now — re-exported because most call sites import it here.
@@ -217,6 +217,59 @@ function Field({ label, hint, children, className = '' }: { label: string; hint?
   )
 }
 
+/** A labelled number input for the metrics editor (used/total/warn/crit). */
+function MetricNumField({
+  label,
+  value,
+  onValue,
+  placeholder,
+}: {
+  label: string
+  value: number | undefined
+  onValue: (v: number | undefined) => void
+  placeholder?: string
+}) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="text-[9px] font-medium uppercase tracking-wide text-[#8b949e]">{label}</span>
+      <Input
+        type="number"
+        value={value ?? ''}
+        onChange={(e) => onValue(e.target.value === '' ? undefined : Number(e.target.value))}
+        placeholder={placeholder}
+        className={`${INPUT} font-mono`}
+      />
+    </label>
+  )
+}
+
+/** A labelled text input for the metrics editor (key/label/unit). */
+function MetricTextField({
+  label,
+  value,
+  onValue,
+  placeholder,
+  mono = false,
+}: {
+  label: string
+  value: string
+  onValue: (v: string) => void
+  placeholder?: string
+  mono?: boolean
+}) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1">
+      <span className="text-[9px] font-medium uppercase tracking-wide text-[#8b949e]">{label}</span>
+      <Input
+        value={value}
+        onChange={(e) => onValue(e.target.value)}
+        placeholder={placeholder}
+        className={`${INPUT}${mono ? ' font-mono' : ''}`}
+      />
+    </label>
+  )
+}
+
 /** The editable subset of an inventory row, as strings for the form inputs. */
 interface EditForm {
   label: string
@@ -292,6 +345,9 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
   const [form, setForm] = useState<EditForm>(() => (device ? toForm(device) : toForm({} as InventoryEntry)))
   const [properties, setProperties] = useState<NodeProperty[]>(device?.properties ?? [])
   const [services, setServices] = useState<ServiceInfo[]>(device?.services ?? [])
+  // The device's utilisation metrics — keyed gauges the agent or the user feeds;
+  // a canvas node only picks which of these to draw.
+  const [metrics, setMetrics] = useState<UtilizationMetric[]>(device?.metrics ?? [])
   // The device's front panel. Null for a device no rack has ever modelled —
   // there is then nothing to draw and nothing to save.
   const [rackModel, setRackModel] = useState<DeviceRackModel | null>(
@@ -331,6 +387,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
     setForm(toForm(d))
     setProperties(d.properties ?? [])
     setServices(d.services ?? [])
+    setMetrics(d.metrics ?? [])
     setRackModel(toRackModel(d))
     setEditing(false)
     setSvcModal(null)
@@ -413,6 +470,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
     setForm(toForm(device))
     setProperties(device.properties ?? [])
     setServices(device.services ?? [])
+    setMetrics(device.metrics ?? [])
     setRackModel(toRackModel(device))
   }
 
@@ -455,6 +513,13 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
     )
   }
 
+  // --- Utilisation metrics (keyed gauges owned by the device) ---------------
+  const addMetric = () =>
+    setMetrics((prev) => [...prev, { key: '', label: '', kind: 'range', unit: '' }])
+  const updateMetric = (i: number, patch: Partial<UtilizationMetric>) =>
+    setMetrics((prev) => prev.map((m, j) => (j === i ? { ...m, ...patch } : m)))
+  const removeMetric = (i: number) => setMetrics((prev) => prev.filter((_, j) => j !== i))
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -482,6 +547,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
         check_target: nullable(form.check_target),
         properties,
         services,
+        metrics,
         // Only for a device that has a front panel: sending these for one that
         // has none would model every device the user ever edits.
         ...(rackModel
@@ -739,6 +805,108 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                     </div>
                   )}
                 </Section>
+
+                {/* The device's utilisation metrics — the data side. A canvas
+                    node only picks which of these to draw; the values live here. */}
+                <section className="rounded-lg border border-[#30363d] bg-[#161b22] overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-[#30363d]">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold">
+                      <HeartPulse size={12} className="text-[#00d4ff]" />
+                      Metrics{metrics.length > 0 ? ` (${metrics.length})` : ''}
+                    </div>
+                    <button
+                      onClick={addMetric}
+                      className="flex items-center gap-1 text-[10px] text-[#00d4ff] hover:text-[#00d4ff]/80 transition-colors cursor-pointer"
+                    >
+                      <Plus size={10} /> Add
+                    </button>
+                  </div>
+                  <div className="p-2.5 flex flex-col gap-2">
+                    {metrics.length === 0 ? (
+                      <Empty>No metrics — click Add to register one (a drive's capacity, a CPU load, ...).</Empty>
+                    ) : (
+                      metrics.map((m, i) => (
+                        <div key={i} className="relative rounded-md border border-[#30363d] bg-[#21262d] p-2.5 pr-8 flex flex-col gap-2">
+                          <button
+                            onClick={() => removeMetric(i)}
+                            title="Remove metric"
+                            className="absolute right-2 top-2 text-[#8b949e] hover:text-[#f85149] cursor-pointer"
+                          >
+                            <X size={12} />
+                          </button>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <MetricTextField
+                              label="Key"
+                              mono
+                              value={m.key ?? ''}
+                              onValue={(v) => updateMetric(i, { key: v })}
+                              placeholder="id"
+                            />
+                            <MetricTextField
+                              label="Label"
+                              value={m.label ?? ''}
+                              onValue={(v) => updateMetric(i, { label: v })}
+                              placeholder="Name"
+                            />
+                            <label className="flex min-w-0 flex-1 flex-col gap-1">
+                              <span className="text-[9px] font-medium uppercase tracking-wide text-[#8b949e]">Kind</span>
+                              <Select value={m.kind ?? 'range'} onValueChange={(v) => { if (v != null) updateMetric(i, { kind: v }) }}>
+                                <SelectTrigger className={INPUT}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="range">range (used/total)</SelectItem>
+                                  <SelectItem value="value">value</SelectItem>
+                                  <SelectItem value="status">status</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </label>
+                            <MetricTextField
+                              label="Unit"
+                              value={m.unit ?? ''}
+                              onValue={(v) => updateMetric(i, { unit: v || undefined })}
+                              placeholder="GB"
+                            />
+                          </div>
+                          {m.kind === 'status' ? (
+                            <Input
+                              value={typeof m.value === 'string' ? m.value : ''}
+                              onChange={(e) => updateMetric(i, { value: e.target.value })}
+                              placeholder="status (ok / warn / crit)"
+                              className={`${INPUT} font-mono`}
+                            />
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              {m.kind === 'range' && (
+                                <>
+                                  <MetricNumField label={`Used${m.unit ? ` (${m.unit})` : ''}`} value={m.used} onValue={(v) => updateMetric(i, { used: v })} />
+                                  <MetricNumField label={`Total${m.unit ? ` (${m.unit})` : ''}`} value={m.total} onValue={(v) => updateMetric(i, { total: v })} />
+                                </>
+                              )}
+                              {m.kind === 'value' && (
+                                <MetricNumField
+                                  label={`Value${m.unit ? ` (${m.unit})` : ''}`}
+                                  value={typeof m.value === 'number' ? m.value : undefined}
+                                  onValue={(v) => updateMetric(i, { value: v })}
+                                />
+                              )}
+                              <MetricNumField
+                                label={`Warn at${m.unit ? ` (${m.unit})` : ''}`}
+                                value={m.warn_at}
+                                onValue={(v) => updateMetric(i, { warn_at: v })}
+                              />
+                              <MetricNumField
+                                label={`Crit at${m.unit ? ` (${m.unit})` : ''}`}
+                                value={m.crit_at}
+                                onValue={(v) => updateMetric(i, { crit_at: v })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
               </div>
             </div>
           ) : (
