@@ -154,6 +154,18 @@
     font-family: 'JetBrains Mono', monospace;
 }
 
+/* Native number-input spinners clash with the dark theme and can't be reliably
+   restyled cross-browser, so hide them — values are typed, not stepped. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
 /* Edge flow animation — dot traveling from source to target */
 @keyframes flow-dot {
     from { stroke-dashoffset: 0; }

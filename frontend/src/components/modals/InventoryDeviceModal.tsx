@@ -826,7 +826,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                       <Empty>No metrics — click Add to register one (a drive's capacity, a CPU load, ...).</Empty>
                     ) : (
                       metrics.map((m, i) => (
-                        <div key={`${m.key || m.label || i}`} className="relative rounded-md border border-[#30363d] bg-[#21262d] p-2.5 pr-8 flex flex-col gap-2">
+                        <div key={i} className="relative rounded-md border border-[#30363d] bg-[#21262d] p-2.5 pr-8 flex flex-col gap-2">
                           <button
                             onClick={() => removeMetric(i)}
                             title="Remove metric"
@@ -840,13 +840,13 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                               mono
                               value={m.key ?? ''}
                               onValue={(v) => updateMetric(i, { key: v })}
-                              placeholder="stable id"
+                              placeholder="id"
                             />
                             <MetricTextField
                               label="Label"
                               value={m.label ?? ''}
                               onValue={(v) => updateMetric(i, { label: v })}
-                              placeholder="Capacity"
+                              placeholder="Name"
                             />
                             <label className="flex min-w-0 flex-1 flex-col gap-1">
                               <span className="text-[9px] font-medium uppercase tracking-wide text-[#8b949e]">Kind</span>
@@ -865,7 +865,7 @@ export function InventoryDeviceModal({ device, onClose, onApprove, onHide, onIgn
                               label="Unit"
                               value={m.unit ?? ''}
                               onValue={(v) => updateMetric(i, { unit: v || undefined })}
-                              placeholder="GB / %"
+                              placeholder="GB"
                             />
                           </div>
                           {m.kind === 'status' ? (
