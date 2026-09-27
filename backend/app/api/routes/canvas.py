@@ -96,6 +96,13 @@ async def save_canvas(
         columns = node_columns(payload)
         if db_node:
             for field, value in columns.items():
+                # ``device_id`` is a server-managed link (set at approve / merge /
+                # link time). A null in the payload means the client does not know
+                # it — never clobber a live link with that, or a save would orphan
+                # the node and ``link_facts`` would mint a duplicate row for a
+                # device that has no ip/mac to re-match on.
+                if field == "device_id" and value is None and db_node.device_id:
+                    continue
                 setattr(db_node, field, value)
         else:
             db_node = Node(**columns)

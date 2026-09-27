@@ -980,6 +980,7 @@ async def approve_device(
     return {
         "approved": True,
         "node_id": node_id,
+        "device_id": device.id,
         "edges_created": len(edges),
         "edges": edges,
     }

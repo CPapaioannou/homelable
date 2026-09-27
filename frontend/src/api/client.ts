@@ -223,6 +223,7 @@ export const scanApi = {
     api.post<{
       approved: boolean
       node_id: string
+      device_id: string
       edges_created: number
       edges: { id: string; source: string; target: string; type?: string; source_handle?: string | null; target_handle?: string | null; lqi?: number | null }[]
     }>(`/scan/pending/${id}/approve`, nodeData),

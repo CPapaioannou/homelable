@@ -1264,6 +1264,55 @@ class TestRoutesKeepTheLinkInStep:
         node = await db_session.get(Node, res.json()["node_id"])
         assert node is not None and node.device_id == "d-1"
 
+    @pytest.mark.asyncio
+    async def test_a_save_without_device_id_does_not_mint_a_duplicate(
+        self, client: AsyncClient, headers, db_session
+    ):
+        """Regression: a canvas save that carries no device_id must not orphan a
+        node's existing link and re-mint the device row.
+
+        A device with no ip/mac/ieee (a drive) can only be found by its
+        device_id. If the save clobbered that link with null, link_facts would
+        fall back to ip/mac matching, find nothing, and mint a second row for
+        the same device.
+        """
+        # A drive: nothing but its id to re-match on.
+        db_session.add(InventoryDevice(id="d-drive", label="Disk 0", type="drive", status="approved"))
+        design_id = (await client.post("/api/v1/designs", json={"name": "A"}, headers=headers)).json()["id"]
+        node_id = str(uuid.uuid4())
+        # A node already linked to the drive, exactly as `approve` leaves it.
+        db_session.add(Node(id=node_id, type="drive", label="Disk 0", design_id=design_id, device_id="d-drive"))
+        await db_session.commit()
+
+        # The canvas saves the node but carries no device_id (the client does not know it).
+        res = await client.post(
+            "/api/v1/canvas/save",
+            json={
+                "design_id": design_id,
+                "nodes": [
+                    {
+                        "id": node_id,
+                        "type": "drive",
+                        "label": "Disk 0",
+                        "status": "unknown",
+                        "pos_x": 0,
+                        "pos_y": 0,
+                    }
+                ],
+                "edges": [],
+                "viewport": {},
+            },
+            headers=headers,
+        )
+        assert res.status_code == 200
+
+        # Still one row, and the node is still linked to it.
+        rows = (await db_session.execute(select(InventoryDevice.id))).scalars().all()
+        assert rows == ["d-drive"]
+        node = await db_session.get(Node, node_id)
+        await db_session.refresh(node)
+        assert node.device_id == "d-drive"
+
 
 class TestPerNodeView:
     """Order and visibility belong to the node, the facts to the row.

@@ -678,6 +678,7 @@ def merge_facts_into_device(
     *,
     overwrite_scalars: bool,
     replace_lists: bool,
+    clear_fields: set[str] | None = None,
 ) -> None:
     """Fold one view of a device into its inventory row, in place.
 
@@ -702,6 +703,12 @@ def merge_facts_into_device(
     for field in (*DEVICE_SCALARS, "label", "type"):
         incoming = facts.get(field)
         if _blank(incoming):
+            # An explicit clear (the client listed this field as changed) blanks
+            # an established value; a bare snapshot never does, so a stale canvas
+            # save cannot wipe what discovery found. label/type are required and
+            # never cleared.
+            if clear_fields and field in clear_fields and field in DEVICE_SCALARS:
+                setattr(device, field, None)
             continue
         if overwrite_scalars or _blank(getattr(device, field, None)):
             setattr(device, field, incoming)
@@ -829,6 +836,9 @@ async def link_facts(
         await db.flush()
     else:
         merged = dict(facts)
+        # A blank on a field the client explicitly changed is a deliberate clear,
+        # not a stale-snapshot gap — so those (and only those) may blank a row.
+        clear_fields = set(changed_fields) if changed_fields is not None else None
         if changed_fields is not None:
             keep = set(changed_fields) | _LIVE_FACT_FIELDS
             merged = {k: v for k, v in merged.items() if k in keep}
@@ -839,6 +849,7 @@ async def link_facts(
             merged,
             overwrite_scalars=overwrite_scalars,
             replace_lists=replace_lists,
+            clear_fields=clear_fields,
         )
         device.discovery_sources = add_source(device.discovery_sources, CANVAS_SOURCE)
 
